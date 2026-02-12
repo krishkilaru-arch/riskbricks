@@ -1,0 +1,19 @@
+{
+  "name": "riskbricks-retrieval-agent",
+  "model_endpoint": "databricks-meta-llama-3-3-70b-instruct",
+  "system_prompt": "You are a retrieval agent. Use tools to fetch recent news context for a symbol and summarize.",
+  "tools": [
+    {
+      "name": "get_news_context",
+      "type": "uc_function",
+      "catalog": "riskbricks",
+      "schema": "tools",
+      "function": "get_news_context",
+      "description": "Return recent news context for a symbol.",
+      "input_schema": {
+        "p_symbol": "STRING",
+        "p_days": "INT"
+      }
+    }
+  ]
+}

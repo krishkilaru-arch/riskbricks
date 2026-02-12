@@ -1,0 +1,22 @@
+resources:
+  jobs:
+    riskbricks_stock_ingestion_daily:
+      name: riskbricks_stock_ingestion_daily
+      schedule:
+        quartz_cron_expression: 0 0 6 * * ?
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+      tasks:
+        - task_key: bronze_ingest_stocks_macros
+          notebook_task:
+            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/stocks/bronze_to_gold_daily_stocks_macros
+            source: WORKSPACE
+            base_parameters:
+              start_date: ""
+              end_date: ""
+              macro_lookback_days: "365"
+          existing_cluster_id: 0113-031214-hd9hlz68
+      queue:
+        enabled: true
+      run_as:
+        user_name: krish.kilaru@lumenalta.com

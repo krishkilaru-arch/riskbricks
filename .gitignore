@@ -1,0 +1,125 @@
+# Databricks
+.databricks/
+*.dbc
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.code-workspace
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Databricks Bundle deployment files
+.databricks/
+bundle/.databricks/
+*.tfstate*
+
+# Local configuration files (keep templates)
+.databrickscfg
+.env
+.env.local
+
+# Scratch/testing files (development scripts not for deployment)
+scratch/
+*.scratch.py
+to-be-delete/
+
+# Proposal workspace noise (keep core product and deployment docs)
+docs/SESSION_SUMMARY_*.md
+docs/LESSONS_LEARNED.md
+docs/IMPLEMENTATION_COMPLETE.md
+docs/NOTEBOOK_EXIT_STATUS.md
+docs/COMPLETE_TRAINING_REVIEW.md
+docs/OFFICIAL_TRAINING_REVIEW.md
+docs/WHATS_NEW.md
+docs/START_HERE.md
+docs/AGENTS_DEPLOYMENT_STATUS.md
+
+# Local artifacts
+*.bak
+*.orig
+
+# Data files (uncomment if you want to exclude large data files)
+# data/bronze/
+# data/silver/
+# data/gold/
+# *.csv
+# *.parquet

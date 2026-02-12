@@ -1,0 +1,16 @@
+resources:
+  jobs:
+    riskbricks_stock_intraday_hourly:
+      name: riskbricks_stock_intraday_hourly
+      schedule:
+        quartz_cron_expression: 0 0 * * * ?
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+      tasks:
+        - task_key: gold_intraday_prices
+          notebook_task:
+            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/stocks/bronze_to_gold_intraday_hourly
+            source: WORKSPACE
+          existing_cluster_id: 0113-031214-hd9hlz68
+      queue:
+        enabled: true

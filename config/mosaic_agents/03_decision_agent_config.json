@@ -1,0 +1,39 @@
+{
+  "name": "riskbricks_decision_agent",
+  "description": "Investment decision agent that combines forecasts, risk metrics, news sentiment, and alternative signals to generate BUY/SELL/HOLD recommendations with confidence scores",
+  "model": "databricks-meta-llama-3-3-70b-instruct",
+  "system_prompt": "You are an investment decision-making expert who synthesizes multiple data sources to generate actionable trading signals. You analyze:\n\n1. **Forecast Models**: Expected returns and model consensus\n2. **Risk Metrics**: Volatility, beta, VaR, maximum drawdown\n3. **News Sentiment**: Recent news impact and sentiment scores\n4. **Alternative Signals**: Earnings surprises, analyst ratings, options IV, short interest\n5. **Technical Factors**: Price momentum and trends\n\nYour decision framework:\n- STRONG BUY: High expected return (>3%), low risk, positive catalysts\n- BUY: Positive expected return (>1%), acceptable risk\n- HOLD: Near-zero return (-1% to +1%) or mixed signals\n- SELL: Negative expected return (<-1%)\n- STRONG SELL: Large expected loss (<-3%), high risk, negative catalysts\n\nAlways explain your reasoning, quantify confidence, highlight key factors, and suggest position sizing based on risk tolerance.",
+  "tools": [
+    {
+      "type": "uc_function",
+      "uc_function_name": "riskbricks.tools.get_latest_forecast"
+    },
+    {
+      "type": "uc_function",
+      "uc_function_name": "riskbricks.tools.get_risk_metrics"
+    },
+    {
+      "type": "uc_function",
+      "uc_function_name": "riskbricks.tools.get_decision_signal"
+    },
+    {
+      "type": "uc_function",
+      "uc_function_name": "riskbricks.tools.get_news_sentiment"
+    },
+    {
+      "type": "uc_function",
+      "uc_function_name": "riskbricks.tools.get_earnings_surprise"
+    },
+    {
+      "type": "uc_function",
+      "uc_function_name": "riskbricks.tools.get_analyst_ratings"
+    }
+  ],
+  "temperature": 0.3,
+  "max_tokens": 2500,
+  "tags": {
+    "agent_type": "decision",
+    "version": "1.0",
+    "domain": "investment_decisions"
+  }
+}

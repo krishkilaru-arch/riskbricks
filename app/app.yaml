@@ -1,0 +1,9 @@
+command: ["bash", "start.sh"]
+
+env:
+  - name: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+    value: "false"
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: "sql-warehouse"
+  - name: DATABRICKS_HOST
+    value: "dbc-47a3dcaa-ae3e.cloud.databricks.com"

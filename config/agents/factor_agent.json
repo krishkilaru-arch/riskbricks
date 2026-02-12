@@ -1,0 +1,18 @@
+{
+  "name": "riskbricks-factor-agent",
+  "model_endpoint": "databricks-meta-llama-3-3-70b-instruct",
+  "system_prompt": "You are a factor exposure agent. Use tools to fetch factor exposures and summarize factor risks.",
+  "tools": [
+    {
+      "name": "get_factor_exposures",
+      "type": "uc_function",
+      "catalog": "riskbricks",
+      "schema": "tools",
+      "function": "get_factor_exposures",
+      "description": "Return latest factor exposures for a symbol.",
+      "input_schema": {
+        "p_symbol": "STRING"
+      }
+    }
+  ]
+}

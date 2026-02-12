@@ -1,0 +1,22 @@
+# Databricks CLI Configuration Template
+# Copy this file to ~/.databrickscfg and fill in your values
+
+[DEFAULT]
+host = https://dbc-47a3dcaa-ae3e.cloud.databricks.com
+token = your-personal-access-token-here
+
+# Optional: Additional profiles for different environments
+[dev]
+host = https://dbc-47a3dcaa-ae3e.cloud.databricks.com
+token = dev-token-here
+
+[prod]
+host = https://dbc-47a3dcaa-ae3e.cloud.databricks.com
+token = prod-token-here
+
+# How to get a Personal Access Token:
+# 1. Go to your Databricks workspace
+# 2. Click on your username (top right) → User Settings
+# 3. Go to the "Access tokens" tab
+# 4. Click "Generate new token"
+# 5. Copy the token and paste it here

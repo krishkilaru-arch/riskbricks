@@ -1,0 +1,19 @@
+{
+  "name": "riskbricks-risk-agent",
+  "model_endpoint": "databricks-meta-llama-3-3-70b-instruct",
+  "system_prompt": "You are a risk agent. Use tools to fetch risk metrics and summarize risk posture for a symbol.",
+  "tools": [
+    {
+      "name": "get_risk_metrics",
+      "type": "uc_function",
+      "catalog": "riskbricks",
+      "schema": "tools",
+      "function": "get_risk_metrics",
+      "description": "Return risk metrics for a symbol and as_of_date.",
+      "input_schema": {
+        "p_symbol": "STRING",
+        "p_as_of_date": "DATE"
+      }
+    }
+  ]
+}

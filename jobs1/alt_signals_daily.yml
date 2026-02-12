@@ -1,0 +1,37 @@
+resources:
+  jobs:
+    riskbricks_alt_signals_daily:
+      name: riskbricks_alt_signals_daily
+      schedule:
+        quartz_cron_expression: 0 30 7 * * ?
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+      tasks:
+        - task_key: ingest_alt_signals
+          notebook_task:
+            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/alt_signals/ingest_alt_signals_yfinance
+            source: WORKSPACE
+            base_parameters:
+              as_of_date: ""
+              max_symbols: "0"
+              sleep_seconds: "0.2"
+          environment_key: alt_signals_environment
+        - task_key: ingest_alt_signals_sec
+          depends_on:
+            - task_key: ingest_alt_signals
+          notebook_task:
+            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/alt_signals/ingest_alt_signals_sec
+            source: WORKSPACE
+            base_parameters:
+              as_of_date: ""
+              max_symbols: "0"
+              sleep_seconds: "0.2"
+              mode: "form4"
+          environment_key: alt_signals_environment
+      queue:
+        enabled: true
+      environments:
+        - environment_key: alt_signals_environment
+          spec:
+            environment_version: "4"
+      performance_target: PERFORMANCE_OPTIMIZED

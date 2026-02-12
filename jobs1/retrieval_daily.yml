@@ -1,0 +1,25 @@
+resources:
+  jobs:
+    riskbricks_retrieval_daily:
+      name: riskbricks_retrieval_daily
+      schedule:
+        quartz_cron_expression: 0 0 15 * * ?
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+      tasks:
+        - task_key: retrieval
+          notebook_task:
+            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/agents/01_retrieval_agent
+            source: WORKSPACE
+            base_parameters:
+              symbol: "ALL"
+              as_of_date: ""
+              lookback_days: "30"
+          environment_key: retrieval_environment
+      queue:
+        enabled: true
+      environments:
+        - environment_key: retrieval_environment
+          spec:
+            environment_version: "4"
+      performance_target: PERFORMANCE_OPTIMIZED

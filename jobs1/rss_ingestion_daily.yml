@@ -1,0 +1,35 @@
+resources:
+  jobs:
+    riskbricks_rss_ingestion_daily:
+      name: riskbricks_rss_ingestion_daily
+      schedule:
+        quartz_cron_expression: 0 0 8 * * ?
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+      tasks:
+        - task_key: bronze_ingest_rss
+          notebook_task:
+            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/rss/bronze_ingest_rss_news
+            source: WORKSPACE
+          environment_key: bronze_ingest_rss_environment
+        - task_key: silver_combine_rss
+          depends_on:
+            - task_key: bronze_ingest_rss
+          notebook_task:
+            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/rss/silver_combine_rss
+            source: WORKSPACE
+          environment_key: bronze_ingest_rss_environment
+        - task_key: gold_rag_corpus
+          depends_on:
+            - task_key: silver_combine_rss
+          notebook_task:
+            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/rss/gold_rag_corpus
+            source: WORKSPACE
+          environment_key: bronze_ingest_rss_environment
+      queue:
+        enabled: true
+      environments:
+        - environment_key: bronze_ingest_rss_environment
+          spec:
+            environment_version: "4"
+      performance_target: PERFORMANCE_OPTIMIZED

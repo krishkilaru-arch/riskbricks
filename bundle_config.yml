@@ -1,0 +1,70 @@
+# Simplified Databricks Asset Bundle for RiskBricks AI Agents
+# This is a streamlined configuration for deploying agents
+
+bundle:
+  name: riskbricks
+
+# Variables (can be overridden per environment)
+variables:
+  catalog:
+    description: Unity Catalog name
+    default: riskbricks
+    
+  schema:
+    description: Schema for agents
+    default: agents
+    
+  llm_endpoint:
+    description: Foundation Model endpoint
+    default: databricks-meta-llama-3-3-70b-instruct
+
+# Workspace settings
+workspace:
+  root_path: /Shared/riskbricks
+
+# Resources to deploy
+resources:
+  # Notebooks
+  jobs:
+    deploy_agents:
+      name: "Deploy RiskBricks AI Agents"
+      tasks:
+        - task_key: create_uc_functions
+          notebook_task:
+            notebook_path: ./notebooks/mosaic_agents/create_all_uc_functions
+            source: WORKSPACE
+          new_cluster:
+            num_workers: 0
+            spark_version: 14.3.x-scala2.12
+            node_type_id: i3.xlarge
+            data_security_mode: SINGLE_USER
+            
+        - task_key: deploy_agents
+          depends_on:
+            - task_key: create_uc_functions
+          notebook_task:
+            notebook_path: ./notebooks/mosaic_agents/deploy_agents_simple
+            source: WORKSPACE
+          new_cluster:
+            num_workers: 0
+            spark_version: 14.3.x-scala2.12
+            node_type_id: i3.xlarge
+            data_security_mode: SINGLE_USER
+            
+      max_concurrent_runs: 1
+      
+# Multi-environment support
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: ${DATABRICKS_HOST}
+    
+  prod:
+    mode: production
+    workspace:
+      host: ${DATABRICKS_HOST}
+    variables:
+      catalog: riskbricks
+      schema: agents

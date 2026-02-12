@@ -1,0 +1,35 @@
+# Databricks Asset Bundle for RiskBricks
+bundle:
+  name: riskbricks
+
+workspace:
+  root_path: /Workspace/Shared/riskbricks/notebooks/mosaic_agents
+
+targets:
+  dev:
+    mode: development
+    default: true
+
+resources:
+  apps:
+    riskbricks_ui:
+      name: riskbricks-app
+      source_code_path: ./app
+  jobs:
+    deploy_agents_job:
+      name: "Deploy RiskBricks Agents"
+      tasks:
+        - task_key: deploy_agents
+          notebook_task:
+            notebook_path: ${workspace.root_path}/deploy_agents_simple
+            source: WORKSPACE
+          new_cluster:
+            num_workers: 0
+            spark_version: 14.3.x-scala2.12
+            node_type_id: i3.xlarge
+            data_security_mode: SINGLE_USER
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode

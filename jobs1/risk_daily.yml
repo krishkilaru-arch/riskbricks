@@ -1,0 +1,28 @@
+resources:
+  jobs:
+    riskbricks_risk_daily:
+      name: riskbricks_risk_daily
+      schedule:
+        quartz_cron_expression: 0 20 15 * * ?
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+      tasks:
+        - task_key: risk
+          notebook_task:
+            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/agents/03_risk_agent
+            source: WORKSPACE
+            base_parameters:
+              symbol: "ALL"
+              as_of_date: ""
+              lookback_days: "252"
+              order_size: "1000000"
+              impact_factor: "0.1"
+              max_symbols: "0"
+          environment_key: risk_environment
+      queue:
+        enabled: true
+      environments:
+        - environment_key: risk_environment
+          spec:
+            environment_version: "4"
+      performance_target: PERFORMANCE_OPTIMIZED

@@ -1,0 +1,23 @@
+# Top 20 Most Famous US Stocks (Feb 2026)
+# Highly liquid, complete data, no delisting issues
+
+AAPL
+MSFT
+GOOGL
+AMZN
+NVDA
+META
+TSLA
+JPM
+V
+WMT
+JNJ
+PG
+MA
+HD
+BAC
+XOM
+CVX
+KO
+DIS
+NFLX

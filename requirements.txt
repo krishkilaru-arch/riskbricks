@@ -1,0 +1,32 @@
+# RiskBricks Python Dependencies
+# These packages are used in the Databricks notebooks
+
+# Data processing and ML
+pandas>=1.5.0
+numpy>=1.21.0
+scikit-learn>=1.0.0
+scipy>=1.7.0
+
+# Databricks and Spark
+pyspark>=3.3.0
+databricks-sdk>=0.1.0
+
+# HTTP requests for API data
+requests>=2.28.0
+
+# Data visualization (optional, for dashboard enhancements)
+plotly>=5.0.0
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# MLflow for model tracking
+mlflow>=2.0.0
+
+# Development and testing
+pytest>=7.0.0
+black>=22.0.0
+flake8>=4.0.0
+
+# Financial data libraries (optional)
+yfinance>=0.1.0
+pandas-datareader>=0.10.0

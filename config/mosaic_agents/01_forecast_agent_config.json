@@ -1,0 +1,31 @@
+{
+  "name": "riskbricks_forecast_agent",
+  "description": "Multi-model stock price forecasting agent that combines GBM, Ridge, Mean, and News Event models to predict future prices with confidence intervals",
+  "model": "databricks-meta-llama-3-3-70b-instruct",
+  "system_prompt": "You are a quantitative finance expert specializing in stock price forecasting. You have access to multiple forecasting models (Geometric Brownian Motion, Ridge Regression, Simple Mean, and News Event-based models). When asked about a stock forecast:\n\n1. Query the forecast data using available tools\n2. Analyze consensus across models\n3. Consider risk metrics and volatility\n4. Provide confidence intervals\n5. Explain the forecast methodology\n6. Highlight any discrepancies between models\n7. Give actionable insights\n\nAlways be transparent about model limitations and uncertainty. Reference specific model outputs when explaining predictions.",
+  "tools": [
+    {
+      "type": "uc_function",
+      "uc_function_name": "riskbricks.tools.get_latest_forecast"
+    },
+    {
+      "type": "uc_function", 
+      "uc_function_name": "riskbricks.tools.get_forecast_history"
+    },
+    {
+      "type": "uc_function",
+      "uc_function_name": "riskbricks.tools.get_risk_metrics"
+    },
+    {
+      "type": "uc_function",
+      "uc_function_name": "riskbricks.tools.get_company_info"
+    }
+  ],
+  "temperature": 0.3,
+  "max_tokens": 2000,
+  "tags": {
+    "agent_type": "forecast",
+    "version": "1.0",
+    "domain": "quantitative_finance"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "name": "riskbricks-supervisor-agent",
+  "model_endpoint": "databricks-meta-llama-3-3-70b-instruct",
+  "system_prompt": "You are the supervisor agent. Use tools to gather retrieval, forecast, risk, factor, decision, and evaluation context and synthesize a final recommendation.",
+  "tools": [
+    {
+      "name": "get_news_context",
+      "type": "uc_function",
+      "catalog": "riskbricks",
+      "schema": "tools",
+      "function": "get_news_context",
+      "description": "Return recent news context for a symbol.",
+      "input_schema": {
+        "p_symbol": "STRING",
+        "p_days": "INT"
+      }
+    },
+    {
+      "name": "get_news_impact_stats",
+      "type": "uc_function",
+      "catalog": "riskbricks",
+      "schema": "tools",
+      "function": "get_news_impact_stats",
+      "description": "Return historical news impact statistics for a symbol.",
+      "input_schema": {
+        "p_symbol": "STRING"
+      }
+    },
+    {
+      "name": "get_latest_forecast",
+      "type": "uc_function",
+      "catalog": "riskbricks",
+      "schema": "tools",
+      "function": "get_latest_forecast",
+      "description": "Return the latest forecast for a symbol and target date.",
+      "input_schema": {
+        "p_symbol": "STRING",
+        "p_target_date": "DATE"
+      }
+    },
+    {
+      "name": "get_risk_metrics",
+      "type": "uc_function",
+      "catalog": "riskbricks",
+      "schema": "tools",
+      "function": "get_risk_metrics",
+      "description": "Return risk metrics for a symbol.",
+      "input_schema": {
+        "p_symbol": "STRING",
+        "p_as_of_date": "DATE"
+      }
+    },
+    {
+      "name": "get_factor_exposures",
+      "type": "uc_function",
+      "catalog": "riskbricks",
+      "schema": "tools",
+      "function": "get_factor_exposures",
+      "description": "Return latest factor exposures for a symbol.",
+      "input_schema": {
+        "p_symbol": "STRING"
+      }
+    },
+    {
+      "name": "get_decision_signal",
+      "type": "uc_function",
+      "catalog": "riskbricks",
+      "schema": "tools",
+      "function": "get_decision_signal",
+      "description": "Return the latest decision signal for a symbol.",
+      "input_schema": {
+        "p_symbol": "STRING",
+        "p_as_of_date": "DATE"
+      }
+    },
+    {
+      "name": "get_forecast_eval",
+      "type": "uc_function",
+      "catalog": "riskbricks",
+      "schema": "tools",
+      "function": "get_forecast_eval",
+      "description": "Return evaluation metrics for a symbol and target date.",
+      "input_schema": {
+        "p_symbol": "STRING",
+        "p_target_date": "DATE"
+      }
+    },
+    {
+      "name": "get_geopolitical_events",
+      "type": "uc_function",
+      "catalog": "riskbricks",
+      "schema": "tools",
+      "function": "get_geopolitical_events",
+      "description": "Return active geopolitical events.",
+      "input_schema": {}
+    }
+  ]
+}
