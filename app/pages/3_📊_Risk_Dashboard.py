@@ -1,521 +1,150 @@
 """
-Risk Dashboard
-Visualize portfolio risk metrics, stress tests, and sector exposures
+Risk Dashboard — Interactive risk analytics and visualizations
 """
 
 import streamlit as st
-from databricks import sql
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-import os
+import os, sys
+
+APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+from db_utils import run_query
 
 st.set_page_config(page_title="Risk Dashboard", page_icon="📊", layout="wide")
-
-# Page header
 st.title("📊 Risk Dashboard")
-st.markdown("Comprehensive risk analytics and visualizations for all portfolio managers.")
+st.caption("Comprehensive risk analytics and visualizations for all portfolio managers.")
 
-# Database connection
-@st.cache_resource
-def get_db_connection():
-    """Get Databricks SQL connection"""
-    try:
-        token = os.getenv('DATABRICKS_TOKEN')
-        hostname = os.getenv('DATABRICKS_HOST')
-        warehouse_id = os.getenv('DATABRICKS_WAREHOUSE_ID', 'default')
-        
-        if not token or not hostname:
-            st.error("Missing DATABRICKS_TOKEN or DATABRICKS_HOST environment variables")
-            return None
-        
-        return sql.connect(
-            server_hostname=hostname,
-            http_path=f'/sql/1.0/warehouses/{warehouse_id}',
-            access_token=token
-        )
-    except Exception as e:
-        st.error(f"Failed to connect to Databricks: {str(e)}")
-        return None
+# ── Fetch core data ──────────────────────────────────────────────────────────
+risk_df = run_query("""
+    SELECT manager_name, risk_profile, aum_usd, portfolio_beta,
+           weighted_volatility_pct, var_1day_95_usd, var_10day_95_usd, num_positions
+    FROM riskbricks.gold.portfolio_risk_metrics ORDER BY aum_usd DESC
+""")
+stress_df = run_query("""
+    SELECT manager_name, scenario_name, scenario_description,
+           total_impact_usd, impact_pct
+    FROM riskbricks.gold.stress_test_results ORDER BY ABS(impact_pct) DESC
+""")
+sector_df = run_query("""
+    SELECT manager_name, sector, sector_weight_pct
+    FROM riskbricks.gold.sector_exposures ORDER BY manager_name, sector_weight_pct DESC
+""")
 
-@st.cache_data(ttl=300)
-def get_risk_metrics():
-    """Fetch portfolio risk metrics"""
-    conn = get_db_connection()
-    if not conn:
-        return pd.DataFrame()
-    
-    try:
-        query = """
-        SELECT 
-            manager_name,
-            risk_profile,
-            total_value_usd,
-            portfolio_beta,
-            weighted_volatility,
-            var_1day_95,
-            var_10day_95,
-            num_positions
-        FROM riskbricks.gold.portfolio_risk_metrics
-        ORDER BY total_value_usd DESC
-        """
-        return pd.read_sql(query, conn)
-    except Exception as e:
-        st.error(f"Error fetching risk metrics: {str(e)}")
-        return pd.DataFrame()
-
-@st.cache_data(ttl=300)
-def get_stress_tests():
-    """Fetch stress test results"""
-    conn = get_db_connection()
-    if not conn:
-        return pd.DataFrame()
-    
-    try:
-        query = """
-        SELECT 
-            manager_name,
-            scenario_name,
-            scenario_description,
-            total_impact_usd,
-            impact_percentage
-        FROM riskbricks.gold.stress_test_results
-        ORDER BY ABS(impact_percentage) DESC
-        """
-        return pd.read_sql(query, conn)
-    except Exception as e:
-        st.error(f"Error fetching stress tests: {str(e)}")
-        return pd.DataFrame()
-
-@st.cache_data(ttl=300)
-def get_sector_exposures():
-    """Fetch sector exposures"""
-    conn = get_db_connection()
-    if not conn:
-        return pd.DataFrame()
-    
-    try:
-        query = """
-        SELECT 
-            manager_name,
-            sector,
-            sector_weight
-        FROM riskbricks.gold.sector_exposures
-        ORDER BY manager_name, sector_weight DESC
-        """
-        return pd.read_sql(query, conn)
-    except Exception as e:
-        st.error(f"Error fetching sector exposures: {str(e)}")
-        return pd.DataFrame()
-
-# Fetch data
-risk_metrics_df = get_risk_metrics()
-stress_tests_df = get_stress_tests()
-sector_exposures_df = get_sector_exposures()
-
-if risk_metrics_df.empty:
+if risk_df.empty:
     st.warning("No risk metrics found. Please run the analytics pipeline first.")
-    if st.button("📖 View Setup Guide"):
-        st.markdown("""
-        ### Setup Steps:
-        1. Run `00_setup_multi_manager_portfolios.py` to create managers
-        2. Run `01_data_ingestion.py` to ingest market data
-        3. Run `02_data_validation.py` to validate data quality
-        4. Run `03_risk_analytics.py` to compute risk metrics
-        """)
     st.stop()
 
-# Sidebar filters
+# ── Sidebar filters ──────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("### 🎛️ Filters")
-    
-    selected_managers = st.multiselect(
-        "Select Managers",
-        risk_metrics_df['manager_name'].unique().tolist(),
-        default=risk_metrics_df['manager_name'].unique().tolist()
-    )
-    
-    st.markdown("---")
-    
-    metric_view = st.radio(
-        "Metric View",
-        ["Absolute Values", "As % of AUM"]
-    )
-    
-    st.markdown("---")
-    
-    if st.button("🔄 Refresh Data"):
+    st.markdown("### Filters")
+    all_mgrs = risk_df["manager_name"].unique().tolist()
+    selected = st.multiselect("Managers", all_mgrs, default=all_mgrs)
+    view = st.radio("View", ["Absolute ($)", "% of AUM"])
+    if st.button("🔄 Refresh"):
         st.cache_data.clear()
         st.rerun()
 
-# Filter data
-filtered_risk = risk_metrics_df[risk_metrics_df['manager_name'].isin(selected_managers)]
-filtered_stress = stress_tests_df[stress_tests_df['manager_name'].isin(selected_managers)]
-filtered_sector = sector_exposures_df[sector_exposures_df['manager_name'].isin(selected_managers)]
+filt_risk   = risk_df[risk_df["manager_name"].isin(selected)].copy()
+filt_stress = stress_df[stress_df["manager_name"].isin(selected)].copy()
+filt_sector = sector_df[sector_df["manager_name"].isin(selected)].copy()
 
-# Overview metrics
-st.markdown("## 📈 Portfolio Overview")
-
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    total_aum = filtered_risk['total_value_usd'].sum()
-    st.metric("Total AUM", f"${total_aum/1e6:.1f}M")
-
-with col2:
-    avg_beta = (filtered_risk['portfolio_beta'] * filtered_risk['total_value_usd']).sum() / total_aum
-    st.metric("Weighted Avg Beta", f"{avg_beta:.2f}")
-
-with col3:
-    total_var_1day = filtered_risk['var_1day_95'].sum()
-    st.metric("Total 1-Day VaR", f"${total_var_1day/1e6:.2f}M")
-
-with col4:
-    var_pct = (total_var_1day / total_aum) * 100
-    st.metric("VaR as % of AUM", f"{var_pct:.2f}%")
-
+# ── Overview KPIs ────────────────────────────────────────────────────────────
+total_aum = filt_risk["aum_usd"].sum()
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Total AUM", f"${total_aum/1e6:,.1f}M")
+c2.metric("Wtd Avg Beta", f"{(filt_risk['portfolio_beta'] * filt_risk['aum_usd']).sum() / max(total_aum, 1):.2f}")
+c3.metric("1-Day VaR", f"${filt_risk['var_1day_95_usd'].sum()/1e6:,.2f}M")
+c4.metric("VaR / AUM", f"{filt_risk['var_1day_95_usd'].sum() / max(total_aum, 1) * 100:.2f}%")
 st.markdown("---")
 
-# Portfolio Manager Insights
-st.markdown("## 🧭 Portfolio Manager Insights")
+# ── Tabs ─────────────────────────────────────────────────────────────────────
+t1, t2, t3, t4 = st.tabs(["VaR Analysis", "Stress Tests", "Sector Exposure", "Signals & Forecasts"])
 
-@st.cache_data(ttl=300)
-def get_accuracy_scoreboard():
-    conn = get_db_connection()
-    if not conn:
-        return pd.DataFrame()
-    try:
-        query = """
-        SELECT symbol, horizon_days, window_start, window_end, hit_rate, mae, rmse, mape, sample_size
+color_map = {"Conservative": "#22c55e", "Balanced": "#eab308", "Aggressive": "#ef4444"}
+
+# ── Tab 1: VaR ───────────────────────────────────────────────────────────────
+with t1:
+    lc, rc = st.columns(2)
+    with lc:
+        if view == "% of AUM":
+            filt_risk["var1_pct"] = filt_risk["var_1day_95_usd"] / filt_risk["aum_usd"] * 100
+            fig = px.bar(filt_risk, x="manager_name", y="var1_pct", color="risk_profile",
+                         title="1-Day VaR as % of AUM", color_discrete_map=color_map)
+        else:
+            fig = px.bar(filt_risk, x="manager_name", y="var_1day_95_usd", color="risk_profile",
+                         title="1-Day VaR (95%)", color_discrete_map=color_map)
+        fig.update_layout(margin=dict(t=40, b=20))
+        st.plotly_chart(fig, use_container_width=True)
+    with rc:
+        if view == "% of AUM":
+            filt_risk["var10_pct"] = filt_risk["var_10day_95_usd"] / filt_risk["aum_usd"] * 100
+            fig2 = px.bar(filt_risk, x="manager_name", y="var10_pct", color="risk_profile",
+                          title="10-Day VaR as % of AUM", color_discrete_map=color_map)
+        else:
+            fig2 = px.bar(filt_risk, x="manager_name", y="var_10day_95_usd", color="risk_profile",
+                          title="10-Day VaR (95%)", color_discrete_map=color_map)
+        fig2.update_layout(margin=dict(t=40, b=20))
+        st.plotly_chart(fig2, use_container_width=True)
+
+    st.dataframe(filt_risk[["manager_name", "risk_profile", "aum_usd", "portfolio_beta",
+                             "weighted_volatility_pct", "var_1day_95_usd", "var_10day_95_usd"]].style.format({
+        "aum_usd": "${:,.0f}", "var_1day_95_usd": "${:,.0f}", "var_10day_95_usd": "${:,.0f}",
+        "portfolio_beta": "{:.2f}", "weighted_volatility_pct": "{:.1f}%"
+    }), use_container_width=True, hide_index=True)
+
+# ── Tab 2: Stress Tests ──────────────────────────────────────────────────────
+with t2:
+    if not filt_stress.empty:
+        fig3 = px.bar(filt_stress, x="scenario_name", y="impact_pct", color="manager_name",
+                      barmode="group", title="Stress Test Impact (% of Portfolio)")
+        fig3.update_layout(margin=dict(t=40, b=20))
+        st.plotly_chart(fig3, use_container_width=True)
+        st.dataframe(filt_stress.style.format({
+            "total_impact_usd": "${:,.0f}", "impact_pct": "{:.2f}%"
+        }), use_container_width=True, hide_index=True)
+    else:
+        st.info("No stress test data available.")
+
+# ── Tab 3: Sector Exposure ───────────────────────────────────────────────────
+with t3:
+    if not filt_sector.empty:
+        fig4 = px.sunburst(filt_sector, path=["manager_name", "sector"], values="sector_weight_pct",
+                           title="Sector Allocation by Manager")
+        fig4.update_layout(margin=dict(t=40, b=10))
+        st.plotly_chart(fig4, use_container_width=True)
+        for mgr in selected:
+            mfx = filt_sector[filt_sector["manager_name"] == mgr]
+            if not mfx.empty:
+                fig5 = px.pie(mfx, names="sector", values="sector_weight_pct",
+                              title=f"{mgr} — Sector Weights", hole=0.4)
+                fig5.update_layout(margin=dict(t=40, b=10))
+                st.plotly_chart(fig5, use_container_width=True)
+    else:
+        st.info("No sector exposure data available.")
+
+# ── Tab 4: Signals & Forecasts ───────────────────────────────────────────────
+with t4:
+    st.markdown("#### Decision Signals")
+    signals_df = run_query("""
+        SELECT symbol, as_of_date, target_date, signal, score, expected_return
+        FROM riskbricks.gold.decision_signals
+        ORDER BY as_of_date DESC
+    """)
+    if not signals_df.empty:
+        st.dataframe(signals_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No decision signals available.")
+
+    st.markdown("#### Accuracy Scoreboard")
+    scoreboard_df = run_query("""
+        SELECT symbol, horizon_days, window_start, window_end,
+               hit_rate, mae, rmse, mape, sample_size
         FROM riskbricks.gold.accuracy_scoreboard_daily
         ORDER BY window_end DESC, hit_rate DESC
-        """
-        return pd.read_sql(query, conn)
-    except Exception as e:
-        st.error(f"Error fetching accuracy scoreboard: {str(e)}")
-        return pd.DataFrame()
-
-@st.cache_data(ttl=300)
-def get_decision_signals():
-    conn = get_db_connection()
-    if not conn:
-        return pd.DataFrame()
-    try:
-        query = """
-        SELECT symbol, forecast_date, horizon_days, decision, expected_return,
-               predicted_price, last_close, confidence_band_low, confidence_band_high
-        FROM riskbricks.gold.decision_signals
-        ORDER BY forecast_date DESC
-        """
-        return pd.read_sql(query, conn)
-    except Exception as e:
-        st.error(f"Error fetching decision signals: {str(e)}")
-        return pd.DataFrame()
-
-scoreboard_df = get_accuracy_scoreboard()
-signals_df = get_decision_signals()
-
-if scoreboard_df.empty:
-    st.warning("No accuracy scoreboard found. Run build_portfolio_manager_outputs.")
-else:
-    st.dataframe(scoreboard_df, use_container_width=True)
-
-if signals_df.empty:
-    st.warning("No decision signals found. Run build_portfolio_manager_outputs.")
-else:
-    st.dataframe(signals_df, use_container_width=True)
-
-# Risk Metrics Section
-st.markdown("## 📊 Risk Metrics Comparison")
-
-tab1, tab2, tab3 = st.tabs(["VaR Analysis", "Beta & Volatility", "Portfolio Composition"])
-
-with tab1:
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # 1-Day VaR comparison
-        if metric_view == "As % of AUM":
-            filtered_risk['var_1day_pct'] = (filtered_risk['var_1day_95'] / filtered_risk['total_value_usd']) * 100
-            fig = px.bar(
-                filtered_risk,
-                x='manager_name',
-                y='var_1day_pct',
-                title='1-Day VaR (95% Confidence) as % of AUM',
-                labels={'var_1day_pct': 'VaR (%)'},
-                color='risk_profile',
-                color_discrete_map={'Conservative': '#4CAF50', 'Balanced': '#FFC107', 'Aggressive': '#F44336'}
-            )
-        else:
-            fig = px.bar(
-                filtered_risk,
-                x='manager_name',
-                y='var_1day_95',
-                title='1-Day VaR (95% Confidence)',
-                labels={'var_1day_95': 'VaR (USD)'},
-                color='risk_profile',
-                color_discrete_map={'Conservative': '#4CAF50', 'Balanced': '#FFC107', 'Aggressive': '#F44336'}
-            )
-        fig.update_layout(showlegend=True)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # 10-Day VaR comparison
-        if metric_view == "As % of AUM":
-            filtered_risk['var_10day_pct'] = (filtered_risk['var_10day_95'] / filtered_risk['total_value_usd']) * 100
-            fig = px.bar(
-                filtered_risk,
-                x='manager_name',
-                y='var_10day_pct',
-                title='10-Day VaR (95% Confidence) as % of AUM',
-                labels={'var_10day_pct': 'VaR (%)'},
-                color='risk_profile',
-                color_discrete_map={'Conservative': '#4CAF50', 'Balanced': '#FFC107', 'Aggressive': '#F44336'}
-            )
-        else:
-            fig = px.bar(
-                filtered_risk,
-                x='manager_name',
-                y='var_10day_95',
-                title='10-Day VaR (95% Confidence)',
-                labels={'var_10day_95': 'VaR (USD)'},
-                color='risk_profile',
-                color_discrete_map={'Conservative': '#4CAF50', 'Balanced': '#FFC107', 'Aggressive': '#F44336'}
-            )
-        fig.update_layout(showlegend=True)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # VaR table
-    st.markdown("### Detailed VaR Metrics")
-    display_df = filtered_risk[['manager_name', 'risk_profile', 'total_value_usd', 'var_1day_95', 'var_10day_95']].copy()
-    display_df['var_1day_pct'] = (display_df['var_1day_95'] / display_df['total_value_usd']) * 100
-    display_df['var_10day_pct'] = (display_df['var_10day_95'] / display_df['total_value_usd']) * 100
-    
-    st.dataframe(
-        display_df.style.format({
-            'total_value_usd': '${:,.0f}',
-            'var_1day_95': '${:,.0f}',
-            'var_10day_95': '${:,.0f}',
-            'var_1day_pct': '{:.2f}%',
-            'var_10day_pct': '{:.2f}%'
-        }),
-        use_container_width=True
-    )
-
-with tab2:
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Portfolio Beta
-        fig = px.bar(
-            filtered_risk,
-            x='manager_name',
-            y='portfolio_beta',
-            title='Portfolio Beta (Market Sensitivity)',
-            labels={'portfolio_beta': 'Beta'},
-            color='portfolio_beta',
-            color_continuous_scale='RdYlGn_r'
-        )
-        fig.add_hline(y=1.0, line_dash="dash", line_color="gray", annotation_text="Market Beta = 1.0")
-        st.plotly_chart(fig, use_container_width=True)
-        
-        st.info("""
-        **Beta Interpretation:**
-        - Beta < 0.8: Less volatile than market
-        - Beta 0.8-1.2: Similar to market
-        - Beta > 1.2: More volatile than market
-        """)
-    
-    with col2:
-        # Volatility
-        filtered_risk['volatility_pct'] = filtered_risk['weighted_volatility'] * 100
-        fig = px.bar(
-            filtered_risk,
-            x='manager_name',
-            y='volatility_pct',
-            title='Weighted Portfolio Volatility',
-            labels={'volatility_pct': 'Volatility (%)'},
-            color='volatility_pct',
-            color_continuous_scale='Reds'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Scatter: Beta vs Volatility
-    st.markdown("### Risk-Return Profile")
-    fig = px.scatter(
-        filtered_risk,
-        x='portfolio_beta',
-        y='volatility_pct',
-        size='total_value_usd',
-        color='risk_profile',
-        hover_data=['manager_name', 'num_positions'],
-        title='Portfolio Beta vs Volatility',
-        labels={'portfolio_beta': 'Portfolio Beta', 'volatility_pct': 'Volatility (%)'},
-        color_discrete_map={'Conservative': '#4CAF50', 'Balanced': '#FFC107', 'Aggressive': '#F44336'}
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-with tab3:
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Portfolio size comparison
-        fig = px.pie(
-            filtered_risk,
-            values='total_value_usd',
-            names='manager_name',
-            title='AUM Distribution'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Number of positions
-        fig = px.bar(
-            filtered_risk,
-            x='manager_name',
-            y='num_positions',
-            title='Number of Positions',
-            labels={'num_positions': 'Positions'},
-            color='num_positions',
-            color_continuous_scale='Blues'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-# Stress Tests Section
-st.markdown("---")
-st.markdown("## 🎯 Stress Test Results")
-
-if not filtered_stress.empty:
-    # Stress test heatmap
-    stress_pivot = filtered_stress.pivot(
-        index='scenario_name',
-        columns='manager_name',
-        values='impact_percentage'
-    )
-    
-    fig = go.Figure(data=go.Heatmap(
-        z=stress_pivot.values,
-        x=stress_pivot.columns,
-        y=stress_pivot.index,
-        colorscale='RdYlGn_r',
-        text=stress_pivot.values,
-        texttemplate='%{text:.1f}%',
-        textfont={"size": 12},
-        colorbar=dict(title="Impact %")
-    ))
-    fig.update_layout(
-        title='Stress Test Impact (% of Portfolio)',
-        xaxis_title='Portfolio Manager',
-        yaxis_title='Scenario',
-        height=400
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Scenario comparison
-    st.markdown("### Scenario Details")
-    scenario = st.selectbox(
-        "Select Scenario",
-        filtered_stress['scenario_name'].unique().tolist()
-    )
-    
-    scenario_data = filtered_stress[filtered_stress['scenario_name'] == scenario]
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        fig = px.bar(
-            scenario_data,
-            x='manager_name',
-            y='total_impact_usd',
-            title=f'{scenario} - Dollar Impact',
-            labels={'total_impact_usd': 'Impact (USD)'},
-            color='manager_name'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.markdown(f"**{scenario}**")
-        st.markdown(f"_{scenario_data.iloc[0]['scenario_description']}_")
-        
-        st.markdown("**Impact by Manager:**")
-        for _, row in scenario_data.iterrows():
-            st.metric(
-                row['manager_name'],
-                f"{row['impact_percentage']:.1f}%",
-                f"${row['total_impact_usd']/1e6:.2f}M"
-            )
-else:
-    st.info("No stress test results available.")
-
-# Sector Exposure Section
-st.markdown("---")
-st.markdown("## 🏢 Sector Exposure Analysis")
-
-if not filtered_sector.empty:
-    # Sector exposure by manager (stacked bar)
-    fig = px.bar(
-        filtered_sector,
-        x='manager_name',
-        y='sector_weight',
-        color='sector',
-        title='Sector Allocation by Manager',
-        labels={'sector_weight': 'Weight'},
-        barmode='stack'
-    )
-    fig.update_layout(yaxis_tickformat=',.0%')
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Individual manager sector breakdown
-    st.markdown("### Manager Sector Breakdown")
-    
-    selected_manager_sector = st.selectbox(
-        "Select Manager for Detailed View",
-        filtered_sector['manager_name'].unique().tolist()
-    )
-    
-    manager_sectors = filtered_sector[filtered_sector['manager_name'] == selected_manager_sector]
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        fig = px.pie(
-            manager_sectors,
-            values='sector_weight',
-            names='sector',
-            title=f'{selected_manager_sector} - Sector Allocation'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.dataframe(
-            manager_sectors[['sector', 'sector_weight']].sort_values('sector_weight', ascending=False).style.format({
-                'sector_weight': '{:.2%}'
-            }),
-            use_container_width=True
-        )
-else:
-    st.info("No sector exposure data available.")
-
-# Footer
-st.markdown("---")
-st.markdown("""
-### 📖 Dashboard Guide
-
-**Value at Risk (VaR):**
-- Potential loss at 95% confidence over 1 day or 10 days
-- Higher VaR = Higher risk
-
-**Beta:**
-- Measures market sensitivity
-- Beta > 1: More volatile than market
-- Beta < 1: Less volatile than market
-
-**Stress Tests:**
-- Simulate extreme market scenarios
-- Show potential portfolio impacts
-- 4 scenarios: Market Crash, Tech Drawdown, Rate Spike, Recession
-
-**Sector Exposure:**
-- Diversification across industries
-- High concentration = Higher sector risk
-""")
+    """)
+    if not scoreboard_df.empty:
+        st.dataframe(scoreboard_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No accuracy scoreboard data available.")

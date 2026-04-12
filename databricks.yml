@@ -1,27 +1,46 @@
 # Databricks Asset Bundle for RiskBricks
+# ========================================
+# Portable configuration - works in any workspace.
+# Override variables per target or via CLI: --var="run_as_user=newuser@company.com"
+
 bundle:
   name: riskbricks
 
-workspace:
-  root_path: /Workspace/Shared/riskbricks/notebooks/mosaic_agents
+variables:
+  notebooks_path:
+    description: "Absolute workspace path to notebooks directory"
+    default: /Workspace/${workspace.current_user.name}/riskbricks/notebooks
+  run_as_user:
+    description: "User email for job run_as"
+    default: ${workspace.current_user.name}
+  catalog:
+    description: "Unity Catalog name"
+    default: riskbricks
 
 targets:
   dev:
     mode: development
     default: true
 
+  staging:
+    mode: development
+
+  prod:
+    mode: production
+
 resources:
   apps:
     riskbricks_ui:
       name: riskbricks-app
       source_code_path: ./app
+
   jobs:
     deploy_agents_job:
       name: "Deploy RiskBricks Agents"
       tasks:
         - task_key: deploy_agents
           notebook_task:
-            notebook_path: ${workspace.root_path}/deploy_agents_simple
+            notebook_path: ${var.notebooks_path}/mosaic_agents/deploy_agents_simple
             source: WORKSPACE
           new_cluster:
             num_workers: 0

@@ -9,7 +9,7 @@ resources:
       tasks:
         - task_key: factor_exposure
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/agents/04_factor_exposure_agent
+            notebook_path: ${var.notebooks_path}/agents/04_factor_exposure_agent
             source: WORKSPACE
             base_parameters:
               start_date: "2025-01-01"

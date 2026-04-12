@@ -40,5 +40,5 @@ If you can see this page, the Databricks App deployment is working correctly.
 with st.sidebar:
     st.success("✅ Sidebar working!")
     st.markdown("### Quick Links")
-    st.markdown("- [Databricks Workspace](https://dbc-47a3dcaa-ae3e.cloud.databricks.com)")
-    st.markdown("- [Agent Bricks](https://dbc-47a3dcaa-ae3e.cloud.databricks.com/ml/agents)")
+    st.markdown("- [Databricks Workspace](#)")
+    st.markdown("- [Agent Bricks](#/ml/agents)")

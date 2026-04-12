@@ -66,7 +66,8 @@ print_success "Connected to workspace: ${WORKSPACE_URL}"
 # Deploy notebooks
 print_step "Step 2: Deploying Notebooks"
 
-WORKSPACE_PATH="/Shared/riskbricks"
+# Auto-detect or override workspace path
+WORKSPACE_PATH="${RISKBRICKS_WORKSPACE_PATH:-/Shared/riskbricks}"
 NOTEBOOKS_PATH="${WORKSPACE_PATH}/notebooks"
 
 echo "Creating workspace directories..."
@@ -132,7 +133,7 @@ databricks sql execute -q "SHOW SCHEMAS IN riskbricks" || print_warning "Could n
 print_step "Step 5: Registering UC Functions"
 
 echo "Running UC tools registration notebook..."
-UC_NOTEBOOK="${NOTEBOOKS_PATH}/agent_framework/01_create_uc_tools.py"
+UC_NOTEBOOK="${NOTEBOOKS_PATH}/04_agents/02_create_uc_functions"
 
 # Check if notebook exists
 if databricks workspace get-status "${UC_NOTEBOOK}" &> /dev/null; then
@@ -162,8 +163,8 @@ databricks sql execute -q "SHOW FUNCTIONS IN riskbricks.tools" || print_warning 
 # Deploy workflows
 print_step "Step 6: Deploying Workflows"
 
-if [ -d "${ROOT}/jobs" ]; then
-    YAML_COUNT=$(find "${ROOT}/jobs" -name "*.yml" -type f | wc -l | tr -d ' ')
+if [ -d "${ROOT}/jobs1" ]; then
+    YAML_COUNT=$(find "${ROOT}/jobs1" -name "*.yml" -type f | wc -l | tr -d ' ')
     print_success "Found ${YAML_COUNT} workflow definitions"
     
     # Try bundle deploy first

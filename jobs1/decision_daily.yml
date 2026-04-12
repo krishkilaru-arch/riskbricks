@@ -9,7 +9,7 @@ resources:
       tasks:
         - task_key: decision
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/agents/06_decision_agent
+            notebook_path: ${var.notebooks_path}/agents/06_decision_agent
             source: WORKSPACE
             base_parameters:
               as_of_date: ""

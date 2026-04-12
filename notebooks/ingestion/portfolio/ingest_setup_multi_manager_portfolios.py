@@ -1,12 +1,12 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # RiskBricks: Multi-Manager Portfolio Setup
-# MAGIC 
+# MAGIC
 # MAGIC Creates the complete data model for RiskBricks with three portfolio managers:
 # MAGIC - **Sarah Russel**: Conservative Growth Strategy
 # MAGIC - **Rena Tang**: Balanced Value Strategy  
 # MAGIC - **Mohit Arora**: Aggressive Growth Strategy
-# MAGIC 
+# MAGIC
 # MAGIC ## Tables Created:
 # MAGIC 1. `company_universe` - Master list of all Fortune 500 companies
 # MAGIC 2. `portfolio_managers` - Manager profiles and risk parameters
@@ -41,7 +41,7 @@ print(f"✅ Using schema: {schema}")
 
 # MAGIC %md
 # MAGIC ## 1. Create Company Universe Table
-# MAGIC 
+# MAGIC
 # MAGIC Master list of all Fortune 500 companies with risk metrics
 
 # COMMAND ----------
@@ -55,7 +55,10 @@ except Exception:
     import importlib.util
     import sys
 
-    repo_root = "/Workspace/Shared/RiskBricks/files"
+    # Auto-detect repo root
+import os as _os
+_nb_ctx = dbutils.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+repo_root = "/Workspace" + _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.dirname(_nb_ctx))))
     module_path = f"{repo_root}/data/fortune_500_portfolio.py"
     spec = importlib.util.spec_from_file_location("fortune_500_portfolio", module_path)
     module = importlib.util.module_from_spec(spec)
@@ -248,7 +251,7 @@ print(f"✅ Created base company_universe with {companies_df.count()} Fortune 50
 
 # MAGIC %md
 # MAGIC ## 1b. Expand Company Universe with ALL Stocks from Stock Prices
-# MAGIC 
+# MAGIC
 # MAGIC Add any additional stocks that exist in stock_prices but aren't in our hardcoded list.
 # MAGIC This ensures the company_universe includes ALL tradeable securities for RAG and analytics.
 
@@ -428,7 +431,7 @@ managers_df.select("manager_name", "risk_profile", "target_return_pct", "max_vol
 
 # MAGIC %md
 # MAGIC ## 3. Generate Portfolio Holdings
-# MAGIC 
+# MAGIC
 # MAGIC Creates realistic holdings for each manager based on their risk profile
 
 # COMMAND ----------

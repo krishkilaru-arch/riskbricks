@@ -416,7 +416,7 @@ def get_stock_data_yfinance(tickers, start_date, end_date=None, batch_size=50):
 
 # Import Fortune 500 portfolio
 import sys
-sys.path.append('/Workspace/Shared/RiskBricks/files/data')
+sys.path.append('{cfg.REPO_ROOT}/data')
 
 try:
     from fortune_500_portfolio import get_fortune_500_symbols, generate_portfolio_allocations
@@ -911,16 +911,16 @@ print("✅ Data ingestion complete!")
 
 # MAGIC %md
 # MAGIC ## 📅 Data Freshness & Scheduling
-# MAGIC 
+# MAGIC
 # MAGIC ### For Live Demo - Schedule This Notebook:
-# MAGIC 
+# MAGIC
 # MAGIC 1. **Go to**: Workflows → Jobs → Create Job
 # MAGIC 2. **Task**: Run this notebook (`01_data_ingestion.py`)
 # MAGIC 3. **Schedule Options**:
 # MAGIC    - **Pre-Demo**: Run once at 5:00 PM ET (after market close)
 # MAGIC    - **During Demo**: Every 15-30 minutes (shows live updates)
 # MAGIC    - **Daily Production**: Once daily at 5:30 PM ET
-# MAGIC 
+# MAGIC
 # MAGIC ### Market Data Update Frequencies:
 # MAGIC - **Stock Prices**: Updated ~15 min delayed (Yahoo Finance free tier)
 # MAGIC - **Macro Indicators**: Daily (FRED)

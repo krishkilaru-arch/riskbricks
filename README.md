@@ -25,32 +25,96 @@ RiskBricks tracks three representative managers with different mandates:
 
 | Manager | Risk Profile | Strategy | Target Return | Holdings | AUM |
 |---------|--------------|----------|---------------|----------|-----|
-| Sarah D | Conservative | Capital Preservation | 7% | 35 | $50M |
-| Rena C | Balanced | Growth & Income | 11% | 60 | $75M |
-| Mohit B | Aggressive | High-Growth Tech | 18% | 45 | $100M |
+| Sarah Russel | Conservative | Capital Preservation | 7% | 35 | $50M |
+| Rena Tang | Balanced | Growth & Income | 11% | 60 | $75M |
+| Mohit Arora | Aggressive | High-Growth Tech | 18% | 45 | $100M |
 
 ## End-to-End Architecture
 
-```text
-External Signals
-  -> Stocks, macro (FRED), alternative data, RSS/news, GDELT
-  -> Bronze ingestion notebooks (batch + incremental)
-  -> Delta tables in Unity Catalog
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        EXTERNAL DATA SOURCES                            │
+│  Yahoo Finance │ FRED (Macro) │ RSS/News │ GDELT Events │ SEC Filings  │
+└───────┬─────────────┬──────────────┬────────────┬──────────────┬────────┘
+        │             │              │            │              │
+        ▼             ▼              ▼            ▼              ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  BRONZE (notebooks/00_bronze/)                                          │
+│  Raw ingestion → Delta tables in Unity Catalog                          │
+│  ┌──────────────┐ ┌───────────────────┐ ┌────────┐ ┌─────────────────┐ │
+│  │stock_prices  │ │macro_indicators   │ │news_rss│ │historical_news  │ │
+│  │_bronze       │ │_bronze            │ │_all    │ │_gdelt           │ │
+│  └──────────────┘ └───────────────────┘ └────────┘ └─────────────────┘ │
+│  portfolio_holdings_bronze │ rag_corpus                                  │
+└───────────────────────────┬─────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  SILVER (notebooks/02_silver/)                                          │
+│  Validation, dedup, quality scoring                                     │
+│  ┌──────────────┐ ┌───────────────────┐ ┌──────────────┐ ┌───────────┐ │
+│  │stock_prices  │ │macro_indicators   │ │forecast_     │ │rag_       │ │
+│  │(1.1M rows,   │ │(6 series,         │ │features_daily│ │documents  │ │
+│  │ 414 symbols) │ │ 10yr history)     │ │              │ │           │ │
+│  └──────────────┘ └───────────────────┘ └──────────────┘ └───────────┘ │
+└───────────────────────────┬─────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  GOLD (notebooks/03_gold/)                                              │
+│  Analytics, risk metrics, forecasts, RAG assets                         │
+│                                                                         │
+│  Portfolio Layer:          Risk Layer:           AI/RAG Layer:           │
+│  ┌──────────────────┐     ┌──────────────────┐  ┌───────────────────┐  │
+│  │portfolio_managers │     │portfolio_risk_   │  │rag_corpus         │  │
+│  │(3 managers)       │     │metrics (VaR,β)   │  │rag_evidence_log   │  │
+│  │portfolio_holdings │     │stress_test_      │  │rag_sector_insights│  │
+│  │(139 positions)    │     │results           │  │news_impact_history│  │
+│  │company_universe   │     │risk_factor_      │  │rag_news_timeline  │  │
+│  └──────────────────┘     │exposures         │  └───────────────────┘  │
+│                            └──────────────────┘                         │
+│  Forecast Layer:           Decision Layer:                              │
+│  ┌──────────────────┐     ┌──────────────────┐                         │
+│  │stock_forecasts   │     │decision_signals  │                         │
+│  │forecast_eval     │     │accuracy_scoreboard│                        │
+│  │forecast_daily    │     │attribution_summary│                        │
+│  └──────────────────┘     └──────────────────┘                         │
+└───────────────────────────┬─────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  AGENT LAYER (notebooks/04_agents/ + mosaic_agents/)                    │
+│                                                                         │
+│  ┌──────────────────────────────────────────────────────────┐          │
+│  │            SUPERVISOR AGENT (Llama 3.3 70B)              │          │
+│  │         Routes requests → specialized tool agents         │          │
+│  └──────┬──────┬──────┬──────┬──────┬──────┬───────┘          │
+│         │      │      │      │      │      │                   │
+│         ▼      ▼      ▼      ▼      ▼      ▼                   │
+│   Retrieval Forecast Risk  Factor  News  Decision              │
+│   Agent    Agent    Agent  Agent   Agent Agent                  │
+│                                                                 │
+│  Unity Catalog Functions (riskbricks.agent_tools.*)             │
+│  get_risk_metrics │ get_portfolio_holdings │ compare_managers    │
+│  get_stress_tests │ get_sector_exposures  │ query_rag           │
+│  get_historical_news_impact │ predict_portfolio_news_impact     │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  SERVING LAYER (app/)                                                   │
+│  Databricks App (Streamlit) → 4 pages                                   │
+│                                                                         │
+│  ┌────────────┐ ┌────────────────┐ ┌─────────────┐ ┌───────────────┐  │
+│  │ AI Agent   │ │ Portfolio      │ │ Risk        │ │ Data          │  │
+│  │   Chat     │ │  Management    │ │  Dashboard   │ │  Management   │  │
+│  └────────────┘ └────────────────┘ └─────────────┘ └───────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
 
-Data Quality + Modeling
-  -> Silver validation/standardization (quality checks, schema controls)
-  -> Gold analytics (risk metrics, factor exposures, stress tests, forecasts, RAG assets)
-  -> MLflow tracking + model registry
-
-Agent Layer
-  -> Specialized agents (retrieval, forecast, risk, factor, news, decision, outputs)
-  -> Supervisor orchestration for tool routing and multi-step reasoning
-  -> Unity Catalog functions for governed tool execution
-
-Serving + UI
-  -> Databricks model serving / agent endpoints
-  -> Databricks App (Streamlit) for analyst and PM workflows
-  -> Interactive dashboards, manager comparisons, and Q&A
+┌─────────────────────────────────────────────────────────────────────────┐
+│  DEPLOYMENT (jobs1/ + databricks.yml)                                   │
+│  15 scheduled workflows │ Databricks Asset Bundles │ MLflow tracking    │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Core Components

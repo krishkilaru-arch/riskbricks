@@ -6,7 +6,7 @@ PORT=${PORT:-8501}
 
 echo "Starting Streamlit on port $PORT"
 
-streamlit run app.py \
+streamlit run Home.py \
   --server.port=$PORT \
   --server.address=0.0.0.0 \
   --server.enableCORS=false \

@@ -9,14 +9,23 @@ resources:
       tasks:
         - task_key: bronze_ingest_stocks_macros
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/stocks/bronze_to_gold_daily_stocks_macros
+            notebook_path: ${var.notebooks_path}/00_bronze/ingest_stocks_and_macros_data
             source: WORKSPACE
             base_parameters:
               start_date: ""
               end_date: ""
-              macro_lookback_days: "365"
-          existing_cluster_id: 0113-031214-hd9hlz68
+              stock_picker: ""
+          new_cluster:
+            num_workers: 0
+            spark_version: 14.3.x-scala2.12
+            node_type_id: i3.xlarge
+            data_security_mode: SINGLE_USER
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode
       queue:
         enabled: true
       run_as:
-        user_name: krish.kilaru@lumenalta.com
+        user_name: ${var.run_as_user}

@@ -9,17 +9,17 @@ resources:
       tasks:
         - task_key: bronze_ingest_gdelt
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/gdelt/bronze_ingest_gdelt
+            notebook_path: ${var.notebooks_path}/ingestion/gdelt/bronze_ingest_gdelt
             source: WORKSPACE
-          existing_cluster_id: 0113-031214-hd9hlz68
+          # cluster configured via bundle target
         - task_key: gold_load_gdelt_rag_corpus
           depends_on:
             - task_key: bronze_ingest_gdelt
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/gdelt/gold_load_gdelt_rag_corpus
+            notebook_path: ${var.notebooks_path}/ingestion/gdelt/gold_load_gdelt_rag_corpus
             source: WORKSPACE
-          existing_cluster_id: 0113-031214-hd9hlz68
+          # cluster configured via bundle target
       queue:
         enabled: true
       run_as:
-        user_name: krish.kilaru@lumenalta.com
+        user_name: ${var.run_as_user}

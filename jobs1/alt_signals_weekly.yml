@@ -9,7 +9,7 @@ resources:
       tasks:
         - task_key: ingest_alt_signals_sec_fundamentals
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/alt_signals/ingest_alt_signals_sec
+            notebook_path: ${var.notebooks_path}/ingestion/alt_signals/ingest_alt_signals_sec
             source: WORKSPACE
             base_parameters:
               as_of_date: ""

@@ -5,5 +5,5 @@ env:
     value: "false"
   - name: DATABRICKS_WAREHOUSE_ID
     valueFrom: "sql-warehouse"
-  - name: DATABRICKS_HOST
-    value: "dbc-47a3dcaa-ae3e.cloud.databricks.com"
+  - name: RISKBRICKS_AGENT_ENDPOINT
+    valueFrom: "serving-endpoint"

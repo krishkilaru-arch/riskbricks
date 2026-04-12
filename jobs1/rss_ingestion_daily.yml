@@ -9,21 +9,21 @@ resources:
       tasks:
         - task_key: bronze_ingest_rss
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/rss/bronze_ingest_rss_news
+            notebook_path: ${var.notebooks_path}/ingestion/rss/bronze_ingest_rss_news
             source: WORKSPACE
           environment_key: bronze_ingest_rss_environment
         - task_key: silver_combine_rss
           depends_on:
             - task_key: bronze_ingest_rss
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/rss/silver_combine_rss
+            notebook_path: ${var.notebooks_path}/ingestion/rss/silver_combine_rss
             source: WORKSPACE
           environment_key: bronze_ingest_rss_environment
         - task_key: gold_rag_corpus
           depends_on:
             - task_key: silver_combine_rss
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/rss/gold_rag_corpus
+            notebook_path: ${var.notebooks_path}/ingestion/rss/gold_rag_corpus
             source: WORKSPACE
           environment_key: bronze_ingest_rss_environment
       queue:

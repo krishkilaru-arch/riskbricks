@@ -9,7 +9,7 @@ resources:
       tasks:
         - task_key: news_analytics
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/agents/05_news_analytics_agent
+            notebook_path: ${var.notebooks_path}/agents/05_news_analytics_agent
             source: WORKSPACE
             base_parameters:
               as_of_date: ""

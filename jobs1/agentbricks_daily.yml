@@ -9,7 +9,7 @@ resources:
       tasks:
         - task_key: agentbricks_supervisor
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/agents/00_supervisor
+            notebook_path: ${var.notebooks_path}/agents/02_create_agent
             source: WORKSPACE
             base_parameters:
               symbol: "ALL"

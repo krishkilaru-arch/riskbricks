@@ -49,9 +49,14 @@ print("✅ Libraries imported successfully")
 
 # COMMAND ----------
 
-# FRED API Key - Direct configuration
-FRED_API_KEY = "6b5b2a5e0bc0f87d962491965a6d07cd"
-print("✅ Using configured FRED API key")
+# FRED API Key - Retrieved from Databricks secrets
+try:
+    FRED_API_KEY = dbutils.secrets.get(scope="riskbricks", key="fred-api-key")
+    print("✅ FRED API key loaded from secrets")
+except Exception:
+    # Fallback for development/testing
+    FRED_API_KEY = "6b5b2a5e0bc0f87d962491965a6d07cd"
+    print("⚠️ Using fallback FRED API key - store in secrets for production")
 
 # Database/catalog setup
 catalog = "riskbricks"
@@ -285,7 +290,13 @@ def get_stock_data_yfinance(tickers, start_date, end_date=None):
 
 # Import Fortune 500 portfolio
 import sys
-sys.path.append('/Workspace/Shared/RiskBricks/files/data')
+# Auto-detect repo root for data imports
+import os as _os
+_nb_ctx = dbutils.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_repo_root = _nb_ctx
+while _repo_root and not _os.path.exists(f"/Workspace{_repo_root}/config/riskbricks_config.py"):
+    _repo_root = _os.path.dirname(_repo_root)
+sys.path.append(f"/Workspace{_repo_root}/data")
 
 try:
     from fortune_500_portfolio import get_fortune_500_symbols, generate_portfolio_allocations
@@ -324,9 +335,12 @@ except Exception as e:
     ]
     print(f"📊 Top 100 Fortune 500 stocks: {len(portfolio_stocks)} companies")
 
-allowed_symbols = ["NVDA", "MSFT", "COST"]
-portfolio_stocks = [s for s in portfolio_stocks if s in allowed_symbols]
-print(f"\n✅ Limited to {len(portfolio_stocks)} stocks: {', '.join(portfolio_stocks)}")
+# Use widget selection if specified, otherwise use all portfolio stocks
+if selected_symbols:
+    portfolio_stocks = [s for s in portfolio_stocks if s in selected_symbols]
+    print(f"\n✅ Filtered to {len(portfolio_stocks)} stocks from widget: {', '.join(portfolio_stocks)}")
+else:
+    print(f"\n✅ Using all {len(portfolio_stocks)} portfolio stocks")
 
 # COMMAND ----------
 
@@ -698,16 +712,16 @@ print("✅ Data ingestion complete!")
 
 # MAGIC %md
 # MAGIC ## 📅 Data Freshness & Scheduling
-# MAGIC 
+# MAGIC
 # MAGIC ### For Live Demo - Schedule This Notebook:
-# MAGIC 
+# MAGIC
 # MAGIC 1. **Go to**: Workflows → Jobs → Create Job
 # MAGIC 2. **Task**: Run this notebook (`01_data_ingestion.py`)
 # MAGIC 3. **Schedule Options**:
 # MAGIC    - **Pre-Demo**: Run once at 5:00 PM ET (after market close)
 # MAGIC    - **During Demo**: Every 15-30 minutes (shows live updates)
 # MAGIC    - **Daily Production**: Once daily at 5:30 PM ET
-# MAGIC 
+# MAGIC
 # MAGIC ### Market Data Update Frequencies:
 # MAGIC - **Stock Prices**: Updated ~15 min delayed (Yahoo Finance free tier)
 # MAGIC - **Macro Indicators**: Daily (FRED)
@@ -756,7 +770,7 @@ if days_old == 0:
 elif days_old == 1:
     print("   ✅ Data is recent (yesterday)")
 elif days_old <= 3:
-    print("   ⚠️  Data is {days_old} days old - consider refreshing")
+    print(f"   ⚠️  Data is {days_old} days old - consider refreshing")
 else:
     print(f"   ❌ Data is {days_old} days old - REFRESH RECOMMENDED!")
 

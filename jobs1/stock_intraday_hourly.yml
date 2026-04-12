@@ -9,8 +9,8 @@ resources:
       tasks:
         - task_key: gold_intraday_prices
           notebook_task:
-            notebook_path: /Workspace/Shared/RiskBricks/files/notebooks/ingestion/stocks/bronze_to_gold_intraday_hourly
+            notebook_path: ${var.notebooks_path}/ingestion/stocks/bronze_to_gold_intraday_hourly
             source: WORKSPACE
-          existing_cluster_id: 0113-031214-hd9hlz68
+          # cluster configured via bundle target
       queue:
         enabled: true
