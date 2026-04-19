@@ -31,7 +31,7 @@ resources:
       tasks:
         - task_key: create_uc_functions
           notebook_task:
-            notebook_path: ./notebooks/mosaic_agents/create_all_uc_functions
+            notebook_path: ./notebooks/agents/01_register_uc_tools
             source: WORKSPACE
           new_cluster:
             num_workers: 0
@@ -43,7 +43,7 @@ resources:
           depends_on:
             - task_key: create_uc_functions
           notebook_task:
-            notebook_path: ./notebooks/mosaic_agents/deploy_agents_simple
+            notebook_path: ./notebooks/agents/03_deploy_agent
             source: WORKSPACE
           new_cluster:
             num_workers: 0

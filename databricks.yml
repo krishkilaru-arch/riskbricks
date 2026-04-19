@@ -9,7 +9,7 @@ bundle:
 variables:
   notebooks_path:
     description: "Absolute workspace path to notebooks directory"
-    default: /Workspace/${workspace.current_user.name}/riskbricks/notebooks
+    default: /Workspace/${workspace.current_user.name}/vibe_coding/riskbricks/notebooks
   run_as_user:
     description: "User email for job run_as"
     default: ${workspace.current_user.name}
@@ -40,11 +40,11 @@ resources:
       tasks:
         - task_key: deploy_agents
           notebook_task:
-            notebook_path: ${var.notebooks_path}/mosaic_agents/deploy_agents_simple
+            notebook_path: ${var.notebooks_path}/agents/03_deploy_agent
             source: WORKSPACE
           new_cluster:
             num_workers: 0
-            spark_version: 14.3.x-scala2.12
+            spark_version: 16.4.x-scala2.12
             node_type_id: i3.xlarge
             data_security_mode: SINGLE_USER
             spark_conf:

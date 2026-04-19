@@ -10,26 +10,26 @@ import os, sys
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
-from db_utils import run_query
+from db_utils import run_query, CATALOG
 
-st.set_page_config(page_title="Risk Dashboard", page_icon="📊", layout="wide")
-st.title("📊 Risk Dashboard")
+st.set_page_config(page_title="Risk Dashboard", page_icon="\U0001f4ca", layout="wide")
+st.title("\U0001f4ca Risk Dashboard")
 st.caption("Comprehensive risk analytics and visualizations for all portfolio managers.")
 
 # ── Fetch core data ──────────────────────────────────────────────────────────
-risk_df = run_query("""
+risk_df = run_query(f"""
     SELECT manager_name, risk_profile, aum_usd, portfolio_beta,
            weighted_volatility_pct, var_1day_95_usd, var_10day_95_usd, num_positions
-    FROM riskbricks.gold.portfolio_risk_metrics ORDER BY aum_usd DESC
+    FROM {CATALOG}.gold.portfolio_risk_metrics ORDER BY aum_usd DESC
 """)
-stress_df = run_query("""
+stress_df = run_query(f"""
     SELECT manager_name, scenario_name, scenario_description,
            total_impact_usd, impact_pct
-    FROM riskbricks.gold.stress_test_results ORDER BY ABS(impact_pct) DESC
+    FROM {CATALOG}.gold.stress_test_results ORDER BY ABS(impact_pct) DESC
 """)
-sector_df = run_query("""
+sector_df = run_query(f"""
     SELECT manager_name, sector, sector_weight_pct
-    FROM riskbricks.gold.sector_exposures ORDER BY manager_name, sector_weight_pct DESC
+    FROM {CATALOG}.gold.sector_exposures ORDER BY manager_name, sector_weight_pct DESC
 """)
 
 if risk_df.empty:
@@ -42,7 +42,7 @@ with st.sidebar:
     all_mgrs = risk_df["manager_name"].unique().tolist()
     selected = st.multiselect("Managers", all_mgrs, default=all_mgrs)
     view = st.radio("View", ["Absolute ($)", "% of AUM"])
-    if st.button("🔄 Refresh"):
+    if st.button("\U0001f504 Refresh"):
         st.cache_data.clear()
         st.rerun()
 
@@ -127,9 +127,9 @@ with t3:
 # ── Tab 4: Signals & Forecasts ───────────────────────────────────────────────
 with t4:
     st.markdown("#### Decision Signals")
-    signals_df = run_query("""
+    signals_df = run_query(f"""
         SELECT symbol, as_of_date, target_date, signal, score, expected_return
-        FROM riskbricks.gold.decision_signals
+        FROM {CATALOG}.gold.decision_signals
         ORDER BY as_of_date DESC
     """)
     if not signals_df.empty:
@@ -138,10 +138,10 @@ with t4:
         st.info("No decision signals available.")
 
     st.markdown("#### Accuracy Scoreboard")
-    scoreboard_df = run_query("""
+    scoreboard_df = run_query(f"""
         SELECT symbol, horizon_days, window_start, window_end,
                hit_rate, mae, rmse, mape, sample_size
-        FROM riskbricks.gold.accuracy_scoreboard_daily
+        FROM {CATALOG}.gold.accuracy_scoreboard_daily
         ORDER BY window_end DESC, hit_rate DESC
     """)
     if not scoreboard_df.empty:

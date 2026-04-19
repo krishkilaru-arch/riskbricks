@@ -1,0 +1,129 @@
+# RiskBricks CI/CD Pipeline
+# =========================
+# Runs on every push and PR to main.
+# Gate 1: Lint & static analysis
+# Gate 2: Unit tests (no Spark required)
+# Gate 3: Integration tests (Databricks runtime)
+# Gate 4: Deploy (manual approval for prod)
+
+name: RiskBricks CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+
+jobs:
+  # ── Gate 1: Lint & Static Analysis ─────────────────────────
+  lint:
+    name: Lint & Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install linters
+        run: pip install flake8 black isort
+
+      - name: Check formatting (black)
+        run: black --check --diff notebooks/ app/ tests/
+
+      - name: Check import sorting (isort)
+        run: isort --check-only --diff notebooks/ app/ tests/
+
+      - name: Lint (flake8)
+        run: |
+          flake8 notebooks/ app/ tests/ \
+            --max-line-length=120 \
+            --ignore=E501,W503,E402 \
+            --exclude=__pycache__,_archive,_archived,future_work
+
+  # ── Gate 2: Unit Tests (no Spark) ──────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install pytest -r requirements.txt
+
+      - name: Run unit tests
+        run: |
+          pytest tests/test_config.py tests/test_agent_tools.py::TestAgentGuardrails \
+            -v --tb=short --junitxml=test-results/unit.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: test-results/
+
+  # ── Gate 3: Integration Tests (Databricks) ─────────────────
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Databricks CLI
+        run: pip install databricks-cli databricks-sdk
+
+      - name: Run integration tests on Databricks
+        run: |
+          # Submit test notebook as a job run
+          databricks jobs run-submit \
+            --json '{"run_name": "CI Integration Tests", "tasks": [{"task_key": "tests", "notebook_task": {"notebook_path": "/Workspace/Users/${{ secrets.DATABRICKS_USER }}/vibe_coding/riskbricks/tests/run_tests"}}]}'
+
+  # ── Gate 4: Deploy (manual for prod) ───────────────────────
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Databricks CLI
+        run: pip install databricks-cli
+
+      - name: Deploy bundle (staging)
+        run: |
+          databricks bundle deploy --target staging
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [integration-tests, deploy-staging]
+    if: github.ref == 'refs/heads/main'
+    environment: production  # Requires manual approval in GitHub
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Databricks CLI
+        run: pip install databricks-cli
+
+      - name: Deploy bundle (production)
+        run: |
+          databricks bundle deploy --target prod

@@ -4,14 +4,17 @@ Portfolio Management — Add and manage portfolio managers and holdings
 
 import streamlit as st
 import pandas as pd
-import sys, os
+import uuid
+import os, sys
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from db_utils import run_query, run_statement
+APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+from db_utils import run_query, run_statement, CATALOG
 
-st.set_page_config(page_title="Portfolio Management", page_icon="👥", layout="wide")
-st.title("👥 Portfolio Management")
+st.set_page_config(page_title="Portfolio Management", page_icon="\U0001f465", layout="wide")
+st.title("\U0001f465 Portfolio Management")
 st.caption("View managers, add new ones, and manage individual holdings.")
 
 # ---------------------------------------------------------------------------
@@ -19,35 +22,46 @@ st.caption("View managers, add new ones, and manage individual holdings.")
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=120)
 def get_managers():
-    return run_query("""
+    return run_query(f"""
         SELECT m.manager_id, m.manager_name, m.risk_profile, m.strategy_description,
                m.aum_usd AS total_value,
                m.target_return_pct, m.max_volatility_pct, m.beta_min, m.beta_max, m.created_date
-        FROM riskbricks.gold.portfolio_managers m
+        FROM {CATALOG}.gold.portfolio_managers m
          ORDER BY m.manager_name
     """)
 
 @st.cache_data(ttl=120)
-def get_holdings(manager_id):
+def get_holdings(manager_id: str):
     return run_query(f"""
         SELECT h.symbol, c.company_name, c.sector, h.value_usd, h.weight, c.beta, c.volatility_30d
-        FROM riskbricks.gold.portfolio_holdings h
-        JOIN riskbricks.gold.company_universe c ON h.symbol = c.symbol
-        WHERE h.manager_id = '{manager_id}' ORDER BY h.value_usd DESC
+        FROM {CATALOG}.gold.portfolio_holdings h
+        JOIN {CATALOG}.gold.company_universe c ON h.symbol = c.symbol
+        WHERE h.manager_id = '{_sanitize_id(manager_id)}' ORDER BY h.value_usd DESC
     """)
 
 @st.cache_data(ttl=600)
 def get_available_stocks():
-    return run_query("""
+    return run_query(f"""
         SELECT symbol, company_name, sector, beta, volatility_30d
-        FROM riskbricks.gold.company_universe ORDER BY symbol
+        FROM {CATALOG}.gold.company_universe ORDER BY symbol
     """)
+
+
+def _sanitize_id(val: str) -> str:
+    """Sanitize an identifier to prevent SQL injection — allow only alphanumeric + hyphens."""
+    import re
+    return re.sub(r"[^a-zA-Z0-9\-_]", "", str(val))
+
+
+def _sanitize_text(val: str) -> str:
+    """Escape single quotes in text values to prevent SQL injection."""
+    return str(val).replace("'", "''").replace(";", "").replace("--", "")
 
 
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
-tab1, tab2, tab3 = st.tabs(["📋 View Managers", "➕ Add Manager", "📊 Manage Holdings"])
+tab1, tab2, tab3 = st.tabs(["\U0001f4cb View Managers", "\u2795 Add Manager", "\U0001f4ca Manage Holdings"])
 
 managers_df = get_managers()
 
@@ -56,7 +70,7 @@ with tab1:
         st.info("No managers found. Create one in the **Add Manager** tab.")
     else:
         for _, m in managers_df.iterrows():
-            badge_color = {"Conservative": "🟢", "Balanced": "🟡", "Aggressive": "🔴"}.get(m["risk_profile"], "⚪")
+            badge_color = {"Conservative": "\U0001f7e2", "Balanced": "\U0001f7e1", "Aggressive": "\U0001f534"}.get(m["risk_profile"], "\u26aa")
             with st.expander(f"{badge_color} {m['manager_name']} — {m['risk_profile']}"):
                 c1, c2, c3 = st.columns(3)
                 c1.metric("AUM", f"${m['total_value']/1e6:.1f}M")
@@ -88,19 +102,24 @@ with tab2:
         submitted = st.form_submit_button("Create Manager", type="primary")
 
     if submitted and name:
-        import uuid
         mid = str(uuid.uuid4())[:8]
         beta_map = {"Conservative": (0.6, 0.9), "Balanced": (0.9, 1.1), "Aggressive": (1.2, 1.8)}
         bmin, bmax = beta_map[profile]
+
+        # SAFE: sanitized inputs prevent SQL injection
+        safe_name = _sanitize_text(name)
+        safe_strategy = _sanitize_text(strategy)
+        safe_profile = _sanitize_text(profile)
+
         ok = run_statement(f"""
-            INSERT INTO riskbricks.gold.portfolio_managers
+            INSERT INTO {CATALOG}.gold.portfolio_managers
             (manager_id, manager_name, risk_profile, strategy_description,
              target_return_pct, max_volatility_pct, beta_min, beta_max, created_date)
-            VALUES ('{mid}', '{name}', '{profile}', '{strategy}',
+            VALUES ('{mid}', '{safe_name}', '{safe_profile}', '{safe_strategy}',
                     {target_ret}, {max_vol}, {bmin}, {bmax}, current_date())
         """)
         if ok:
-            st.success(f"✅ Manager **{name}** created!")
+            st.success(f"\u2705 Manager **{name}** created!")
             st.cache_data.clear()
 
 with tab3:
@@ -124,12 +143,15 @@ with tab3:
 
             if add:
                 sector = stocks.loc[stocks["symbol"] == sym, "sector"].values
-                sec = sector[0] if len(sector) else "Unknown"
+                sec = _sanitize_text(sector[0]) if len(sector) else "Unknown"
+                safe_mgr_id = _sanitize_id(mgr_id)
+                safe_sym = _sanitize_id(sym)
+
                 ok = run_statement(f"""
-                    INSERT INTO riskbricks.gold.portfolio_holdings
-                    (manager_id, symbol, sector, value_usd, weight, purchase_date, as_of_date)
-                    VALUES ('{mgr_id}', '{sym}', '{sec}', {val}, {wt}, current_date(), current_date())
+                    INSERT INTO {CATALOG}.gold.portfolio_holdings
+                    (manager_id, symbol, sector, value_usd, weight, purchase_date, as_of_date, updated_at)
+                    VALUES ('{safe_mgr_id}', '{safe_sym}', '{sec}', {val}, {wt}, current_date(), current_date(), current_timestamp())
                 """)
                 if ok:
-                    st.success(f"✅ Added {sym} to {sel_mgr}")
+                    st.success(f"\u2705 Added {sym} to {sel_mgr}")
                     st.cache_data.clear()

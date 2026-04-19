@@ -23,7 +23,6 @@
 
 # Install required libraries
 %pip install yfinance requests pandas
-dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -102,9 +101,9 @@ macro_start_dt = start_dt - timedelta(days=macro_lookback_days)
 macro_start_date = macro_start_dt.strftime("%Y-%m-%d")
 print(f"ℹ️ Macro lookback start: {macro_start_date} (days={macro_lookback_days})")
 
-symbols_df = spark.sql("""
+symbols_df = spark.sql(f"""
     SELECT DISTINCT symbol
-    FROM riskbricks.gold.company_universe
+    FROM {catalog}.gold.company_universe
     ORDER BY symbol
 """)
 selected_symbols = [row.symbol for row in symbols_df.collect()]
@@ -815,27 +814,8 @@ print("="*60)
 gold_schema = f"{catalog}.gold"
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {gold_schema}")
 
-stock_gold = f"{gold_schema}.stock_prices_daily"
+# gold.stock_prices_daily removed — silver.stock_prices is the canonical source
 macro_gold = f"{gold_schema}.macro_indicators_daily"
-
-try:
-    ensure_table_columns(stock_gold, [
-        ("dividends", "DOUBLE"),
-        ("stock_splits", "DOUBLE"),
-        ("capital_gains", "DOUBLE"),
-    ])
-    bronze_stock_df = spark.table(f"{catalog}.{schema}.stock_prices_bronze")
-    write_partitioned_table(
-        table_name=stock_gold,
-        df=bronze_stock_df,
-        partition_cols=("date", "symbol"),
-        date_col="date",
-        start_dt=start_date,
-        end_dt=end_date
-    )
-    print(f"✅ Gold stock_prices_daily updated: {stock_gold}")
-except Exception as exc:
-    print(f"⚠️ Gold stock_prices_daily update skipped: {exc}")
 
 try:
     ensure_table_columns(macro_gold, [
@@ -983,4 +963,3 @@ print("=" * 80)
 # COMMAND ----------
 
 dbutils.notebook.exit("success")
-

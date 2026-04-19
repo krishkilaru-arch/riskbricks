@@ -3,28 +3,38 @@ RiskBricks AI Agent Chat — Streamlit page
 
 Calls the deployed RiskBricks agent serving endpoint for real LLM-powered
 financial risk analysis. Falls back to direct UC function queries if the
-endpoint is not yet deployed.
+endpoint is not yet deployed or has permission issues.
 """
 
 import streamlit as st
 import os
 import json
+import re
 import requests
 from datetime import datetime
 from databricks.sdk import WorkspaceClient
 
+# Configurable catalog
+CATALOG = os.getenv("RISKBRICKS_CATALOG", "riskbricks")
+
+
+def _escape_dollars(text: str) -> str:
+    """Escape $ signs so Streamlit doesn't render them as LaTeX math."""
+    return text.replace("$", "\\$")
+
+
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
-st.set_page_config(page_title="RiskBricks AI Agent", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="RiskBricks AI Agent", page_icon="\U0001f916", layout="wide")
 
-st.title("🤖 RiskBricks AI Agent")
+st.title("\U0001f916 RiskBricks AI Agent")
 st.caption("Ask questions about portfolio risk, holdings, stress tests, forecasts, and macro context.")
 
 # ---------------------------------------------------------------------------
-# Configuration — uses Databricks SDK unified auth (OAuth via App resources)
+# Configuration
 # ---------------------------------------------------------------------------
-AGENT_ENDPOINT = os.getenv("RISKBRICKS_AGENT_ENDPOINT", "agents_riskbricks-agents-riskbricks_agent")
+AGENT_ENDPOINT = os.getenv("RISKBRICKS_AGENT_ENDPOINT", "riskbricks-supervisor-agent")
 
 @st.cache_resource
 def _get_workspace_client():
@@ -32,20 +42,31 @@ def _get_workspace_client():
 
 w = _get_workspace_client()
 
+# ---------------------------------------------------------------------------
+# Response cleaning helpers
+# ---------------------------------------------------------------------------
+_AGENT_PREFIX_RE = re.compile(r"^\[\w+\]:\s*")
+_ROUTING_JSON_RE = re.compile(r'\s*\{"next"\s*:\s*"[^"]*"[^}]*\}\s*')
+
+
+def _clean_message(text: str) -> str:
+    """Strip agent prefixes and routing JSON from a message."""
+    while _AGENT_PREFIX_RE.match(text):
+        text = _AGENT_PREFIX_RE.sub("", text, count=1).strip()
+    text = _ROUTING_JSON_RE.sub(" ", text).strip()
+    text = re.sub(r"\[\w+\]:\s*", " ", text).strip()
+    text = re.sub(r"  +", " ", text)
+    return text
+
 
 def get_agent_response(user_message: str, chat_history: list) -> str:
-    """Call the deployed agent serving endpoint.
-
-    Uses raw HTTP with SDK-generated OAuth headers so we can parse
-    the ChatAgent response format (messages[], not choices[]).
-    """
+    """Call the deployed agent serving endpoint."""
     msgs = []
     for msg in chat_history:
         msgs.append({"role": msg["role"], "content": msg["content"]})
     msgs.append({"role": "user", "content": user_message})
 
     try:
-        # Build URL and auth headers from SDK config
         host = w.config.host.rstrip("/")
         url = f"{host}/serving-endpoints/{AGENT_ENDPOINT}/invocations"
         headers = {"Content-Type": "application/json"}
@@ -55,18 +76,39 @@ def get_agent_response(user_message: str, chat_history: list) -> str:
         resp.raise_for_status()
         data = resp.json()
 
-        # ChatAgent format: {"messages": [{"role": "assistant", "content": "..."}]}
+        # ChatAgent format
         if "messages" in data:
             assistant_msgs = [m for m in data["messages"]
                               if m.get("role") == "assistant" and m.get("content")]
             if assistant_msgs:
+                cleaned = []
+                for m in assistant_msgs:
+                    text = _clean_message(m["content"])
+                    if text and len(text) > 20:
+                        cleaned.append(text)
+
+                if cleaned:
+                    # Prefer the LAST sub-agent tagged message from the
+                    # current turn. Using [-1] instead of max(key=len)
+                    # prevents stale history from being picked in multi-turn.
+                    import re as _re
+                    _agent_tag = _re.compile(r'^\[\w+_agent\]:\s*')
+                    tagged = [t for t in cleaned if _agent_tag.match(t)]
+                    if tagged:
+                        best = tagged[-1]
+                        return _agent_tag.sub('', best, count=1).strip()
+                    # Fallback: last substantive message
+                    return cleaned[-1]
+                for m in reversed(assistant_msgs):
+                    text = _clean_message(m["content"])
+                    if text and len(text) > 5:
+                        return text
                 return assistant_msgs[-1]["content"]
 
         # OpenAI ChatCompletion format fallback
         if "choices" in data and data["choices"]:
             return data["choices"][0]["message"]["content"]
 
-        # Generic fallback
         if "output" in data:
             return data["output"]
 
@@ -75,11 +117,65 @@ def get_agent_response(user_message: str, chat_history: list) -> str:
     except requests.exceptions.HTTPError as e:
         code = e.response.status_code if e.response is not None else "?"
         body = e.response.text[:300] if e.response is not None else str(e)
-        if code == 404:
+        if code in (403, 404):
             return _fallback_response(user_message)
-        return f"⚠️ Agent endpoint error ({code}): {body}"
+        return f"\u26a0\ufe0f Agent endpoint error ({code}): {body}"
+    except requests.exceptions.ConnectionError:
+        return _fallback_response(user_message)
     except Exception as e:
-        return f"⚠️ Error calling agent: {str(e)}"
+        return f"\u26a0\ufe0f Error calling agent: {str(e)}"
+
+
+# ---------------------------------------------------------------------------
+# Safe parameter extraction (Issue 2: prevent SQL injection in fallback)
+# ---------------------------------------------------------------------------
+_KNOWN_MANAGERS = {"sarah russel", "rena tang", "mohit arora"}
+_KNOWN_SYMBOLS = {
+    "LMT", "RTX", "NOC", "GD", "BA", "HII",
+    "XOM", "CVX", "COP", "SLB", "HAL", "OXY",
+    "JPM", "BAC", "GS", "MS", "C", "WFC",
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
+    "INTC", "AMD", "AVGO", "QCOM", "MU", "LRCX", "AMAT",
+    "WMT", "COST", "HD", "NKE", "MCD", "SBUX",
+    "JNJ", "PFE", "UNH", "LLY", "ABBV", "MRK",
+    "CAT", "DE", "HON", "GE", "MMM",
+    "UAL", "DAL", "AAL",
+}
+
+
+def _extract_manager(query: str) -> str:
+    """Extract manager name from query — returns ONLY known safe values."""
+    q = query.lower()
+    if "sarah" in q:
+        return "Sarah Russel"
+    if "rena" in q:
+        return "Rena Tang"
+    if "mohit" in q:
+        return "Mohit Arora"
+    return "all"
+
+
+def _extract_symbol(query: str) -> str:
+    """Extract stock symbol from query — returns ONLY known safe values."""
+    tokens = re.findall(r"\b[A-Z]{1,5}\b", query)
+    skip = {"AI", "I", "A", "THE", "FOR", "AND", "OR", "ALL", "IT", "MY", "IS", "AT", "TO", "IN", "ON"}
+    for t in tokens:
+        if t in _KNOWN_SYMBOLS:
+            return t
+    for sym in ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META"]:
+        if sym.lower() in query.lower():
+            return sym
+    return "NVDA"
+
+
+def _safe_uc_call(cursor, func_name: str, *args: str):
+    """Safely call a UC function with validated string arguments."""
+    # All args are already validated against known-safe values above
+    arg_str = ", ".join(f"'{a}'" for a in args)
+    cursor.execute(f"SELECT * FROM {CATALOG}.agent_tools.{func_name}({arg_str})")
+    rows = cursor.fetchall()
+    cols = [d[0] for d in cursor.description]
+    return [dict(zip(cols, r)) for r in rows]
 
 
 def _fallback_response(query: str) -> str:
@@ -94,7 +190,7 @@ def _fallback_response(query: str) -> str:
 
         if not warehouse_id:
             return (
-                "⚠️ Agent endpoint is not deployed yet. "
+                "\u26a0\ufe0f Agent endpoint is not deployed yet. "
                 "Run `notebooks/agents/03_deploy_agent` to deploy, "
                 "or set DATABRICKS_WAREHOUSE_ID for direct SQL fallback."
             )
@@ -108,68 +204,48 @@ def _fallback_response(query: str) -> str:
 
         q = query.lower()
         results = []
+        title = "Query Results"
 
-        # Route to appropriate UC function based on intent
-        if any(kw in q for kw in ["risk", "var", "volatility", "beta"]):
+        # Route to appropriate UC function based on intent — all inputs are safe
+        if any(kw in q for kw in ["risk", "var", "volatility", "beta", "compare", "metric"]):
             manager = _extract_manager(q)
-            cursor.execute(f"SELECT * FROM riskbricks.agent_tools.get_portfolio_risk_metrics(\'{manager}\')")
-            rows = cursor.fetchall()
-            cols = [d[0] for d in cursor.description]
-            results = [dict(zip(cols, r)) for r in rows]
+            results = _safe_uc_call(cursor, "get_portfolio_risk_metrics", manager)
             title = f"Portfolio Risk Metrics ({manager})"
 
         elif any(kw in q for kw in ["stress", "crash", "drawdown", "recession"]):
             manager = _extract_manager(q)
-            cursor.execute(f"SELECT * FROM riskbricks.agent_tools.get_stress_test_results(\'{manager}\')")
-            rows = cursor.fetchall()
-            cols = [d[0] for d in cursor.description]
-            results = [dict(zip(cols, r)) for r in rows]
+            results = _safe_uc_call(cursor, "get_stress_test_results", manager)
             title = f"Stress Tests ({manager})"
 
         elif any(kw in q for kw in ["holding", "position", "stock"]):
             manager = _extract_manager(q)
-            cursor.execute(f"SELECT * FROM riskbricks.agent_tools.get_portfolio_holdings(\'{manager}\')")
-            rows = cursor.fetchall()
-            cols = [d[0] for d in cursor.description]
-            results = [dict(zip(cols, r)) for r in rows]
+            results = _safe_uc_call(cursor, "get_portfolio_holdings", manager)
             title = f"Holdings ({manager})"
 
         elif any(kw in q for kw in ["sector", "allocation", "exposure"]):
             manager = _extract_manager(q)
-            cursor.execute(f"SELECT * FROM riskbricks.agent_tools.get_sector_exposures(\'{manager}\')")
-            rows = cursor.fetchall()
-            cols = [d[0] for d in cursor.description]
-            results = [dict(zip(cols, r)) for r in rows]
+            results = _safe_uc_call(cursor, "get_sector_exposures", manager)
             title = f"Sector Exposures ({manager})"
 
         elif any(kw in q for kw in ["macro", "fed", "rate", "gdp", "cpi", "vix"]):
-            cursor.execute("SELECT * FROM riskbricks.agent_tools.get_macro_context()")
+            cursor.execute(f"SELECT * FROM {CATALOG}.agent_tools.get_macro_context()")
             rows = cursor.fetchall()
             cols = [d[0] for d in cursor.description]
             results = [dict(zip(cols, r)) for r in rows]
             title = "Macro Context"
 
-        elif any(kw in q for kw in ["forecast", "predict", "price target"]):
+        elif any(kw in q for kw in ["forecast", "predict", "price target", "ml prediction"]):
             symbol = _extract_symbol(q)
-            cursor.execute(f"SELECT * FROM riskbricks.agent_tools.get_stock_forecast(\'{symbol}\')")
-            rows = cursor.fetchall()
-            cols = [d[0] for d in cursor.description]
-            results = [dict(zip(cols, r)) for r in rows]
+            results = _safe_uc_call(cursor, "get_stock_forecast", symbol)
             title = f"Forecast ({symbol})"
 
         elif any(kw in q for kw in ["signal", "buy", "sell", "hold", "decision"]):
             symbol = _extract_symbol(q)
-            cursor.execute(f"SELECT * FROM riskbricks.agent_tools.get_decision_signal(\'{symbol}\')")
-            rows = cursor.fetchall()
-            cols = [d[0] for d in cursor.description]
-            results = [dict(zip(cols, r)) for r in rows]
+            results = _safe_uc_call(cursor, "get_decision_signal", symbol)
             title = f"Decision Signal ({symbol})"
 
         else:
-            cursor.execute("SELECT * FROM riskbricks.agent_tools.get_portfolio_risk_metrics(\'all\')")
-            rows = cursor.fetchall()
-            cols = [d[0] for d in cursor.description]
-            results = [dict(zip(cols, r)) for r in rows]
+            results = _safe_uc_call(cursor, "get_portfolio_risk_metrics", "all")
             title = "Portfolio Overview"
 
         cursor.close()
@@ -179,7 +255,7 @@ def _fallback_response(query: str) -> str:
             return "No data found for that query."
 
         # Format as markdown table
-        md = f"**{title}** _(direct SQL — agent endpoint not deployed)_\n\n"
+        md = f"**{title}** _(direct SQL \u2014 agent endpoint not available)_\n\n"
         cols = list(results[0].keys())
         md += "| " + " | ".join(cols) + " |\n"
         md += "| " + " | ".join(["---"] * len(cols)) + " |\n"
@@ -188,31 +264,7 @@ def _fallback_response(query: str) -> str:
         return md
 
     except Exception as e:
-        return f"⚠️ Fallback query failed: {str(e)}"
-
-
-def _extract_manager(query: str) -> str:
-    q = query.lower()
-    if "sarah" in q:
-        return "Sarah Russel"
-    if "rena" in q:
-        return "Rena Tang"
-    if "mohit" in q:
-        return "Mohit Arora"
-    return "all"
-
-
-def _extract_symbol(query: str) -> str:
-    import re
-    tokens = re.findall(r"\b[A-Z]{1,5}\b", query)
-    skip = {"AI", "I", "A", "THE", "FOR", "AND", "OR", "ALL", "IT", "MY", "IS", "AT", "TO", "IN", "ON"}
-    for t in tokens:
-        if t not in skip:
-            return t
-    for sym in ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META"]:
-        if sym.lower() in query.lower():
-            return sym
-    return "NVDA"
+        return f"\u26a0\ufe0f Fallback query failed: {str(e)}"
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +272,7 @@ def _extract_symbol(query: str) -> str:
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    st.subheader("💡 Example Queries")
+    st.subheader("\U0001f4a1 Example Queries")
     examples = [
         "Compare risk metrics for all three managers",
         "Show me Mohit Arora's top holdings and sector exposure",
@@ -236,7 +288,7 @@ with st.sidebar:
             st.session_state.pending_query = ex
 
     st.divider()
-    st.subheader("⚙️ Status")
+    st.subheader("\u2699\ufe0f Status")
     st.text(f"Endpoint: {AGENT_ENDPOINT}")
 
 if "messages" not in st.session_state:
@@ -244,7 +296,7 @@ if "messages" not in st.session_state:
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        st.markdown(_escape_dollars(message["content"]) if message["role"] == "assistant" else message["content"])
 
 if "pending_query" in st.session_state:
     user_input = st.session_state.pending_query
@@ -257,7 +309,7 @@ if "pending_query" in st.session_state:
     with st.chat_message("assistant"):
         with st.spinner("Analyzing..."):
             response = get_agent_response(user_input, st.session_state.messages[:-1])
-        st.markdown(response)
+        st.markdown(_escape_dollars(response))
     st.session_state.messages.append({"role": "assistant", "content": response})
     st.rerun()
 
@@ -269,5 +321,5 @@ if user_input := st.chat_input("Ask about portfolio risk, holdings, forecasts...
     with st.chat_message("assistant"):
         with st.spinner("Analyzing..."):
             response = get_agent_response(user_input, st.session_state.messages[:-1])
-        st.markdown(response)
+        st.markdown(_escape_dollars(response))
     st.session_state.messages.append({"role": "assistant", "content": response})

@@ -1,0 +1,27 @@
+resources:
+  jobs:
+    riskbricks_daily_data_refresh:
+      name: riskbricks_daily_data_refresh
+      schedule:
+        quartz_cron_expression: 0 0 18 * * ?
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+      tasks:
+        - task_key: full_pipeline_refresh
+          notebook_task:
+            notebook_path: ${var.notebooks_path}/jobs/daily_data_refresh
+            source: WORKSPACE
+          new_cluster:
+            num_workers: 0
+            spark_version: 16.4.x-scala2.12
+            node_type_id: i3.xlarge
+            data_security_mode: SINGLE_USER
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode
+      queue:
+        enabled: true
+      run_as:
+        user_name: ${var.run_as_user}

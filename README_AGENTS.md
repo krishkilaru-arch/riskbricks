@@ -1,239 +1,66 @@
-# 🤖 RiskBricks AI Agents - Official Implementation
+# RiskBricks AI Agents
 
-[![Status](https://img.shields.io/badge/Status-Production%20Ready-green)]()
-[![Pattern](https://img.shields.io/badge/Pattern-Official%20Databricks-blue)]()
-[![Python](https://img.shields.io/badge/Python-3.11+-blue)]()
+## Architecture
 
-## 🎉 What This Is
-
-**Production-ready AI Agents using the OFFICIAL Databricks pattern:**
-- ✅ MLflow `ResponsesAgent` (not LangChain)
-- ✅ `databricks-openai.UCFunctionToolkit`
-- ✅ `databricks.agents.deploy()` SDK
-- ✅ Full observability & tracing
-- ✅ Scale-to-zero cost optimization
-
-This is the **exact pattern** that Databricks AI Playground exports and training courses teach.
-
-## 🚀 Quick Start (5 Minutes)
-
-### 1. Upload Files
-```bash
-cd /Users/analytics360/databricks/new_dais_2026/riskbricks
-./scripts/deploy_official_agents.sh
-```
-
-### 2. Deploy Agents
-In Databricks UI:
-- Navigate to `/Shared/riskbricks/notebooks/mosaic_agents/deploy_agents_official_pattern`
-- Click **Run All** (~10-15 min)
-
-### 3. Test
-```python
-from databricks.sdk import WorkspaceClient
-w = WorkspaceClient()
-
-response = w.serving_endpoints.query(
-    name="riskbricks-agents-forecast_agent",
-    messages=[{"role": "user", "content": "Forecast for AAPL?"}]
-)
-print(response.choices[0].message.content)
-```
-
-## 🤖 The Four Agents
-
-| Agent | Purpose | Tools | UC Path |
-|-------|---------|-------|---------|
-| 📈 **Forecast** | Price predictions | 4 | `riskbricks.agents.forecast_agent` |
-| ⚠️ **Risk** | VaR & volatility | 3 | `riskbricks.agents.risk_agent` |
-| 🎯 **Decision** | BUY/SELL/HOLD | 6 | `riskbricks.agents.decision_agent` |
-| 👔 **Supervisor** | Portfolio analysis | 6 | `riskbricks.agents.supervisor` |
-
-## 📂 Key Files
-
-### Implementation
-- `notebooks/mosaic_agents/agent_base.py` - Core ResponsesAgent class
-- `notebooks/mosaic_agents/deploy_agents_official_pattern.py` - Deployment notebook
-- `scripts/deploy_official_agents.sh` - Deployment automation
-
-### Documentation
-- `docs/QUICK_START_OFFICIAL.md` - 👈 **Start here** for step-by-step guide
-- `docs/OFFICIAL_AGENT_IMPLEMENTATION.md` - Complete technical reference
-- `docs/COMPLETE_TRAINING_REVIEW.md` - Training materials analysis
-- `docs/IMPLEMENTATION_COMPLETE.md` - What's been built
-
-### Summit Proposal
-- `docs/dais/DATABRICKS_SUMMIT_2026_PROPOSAL.md` - Full proposal
-- `docs/dais/SUMMIT_PROPOSAL_EXECUTIVE_SUMMARY.md` - Executive summary
-
-## 📚 Documentation Map
-
-**New to this?** → `docs/QUICK_START_OFFICIAL.md`  
-**Want technical details?** → `docs/OFFICIAL_AGENT_IMPLEMENTATION.md`  
-**Understanding the approach?** → `docs/COMPLETE_TRAINING_REVIEW.md`  
-**What's been built?** → `docs/IMPLEMENTATION_COMPLETE.md`
-
-## ✅ Prerequisites (Already Done)
-
-- ✅ Unity Catalog functions deployed (10 tools)
-- ✅ Data pipeline running (Bronze → Silver → Gold)
-- ✅ Foundation Model available (`databricks-meta-llama-3-3-70b-instruct`)
-- ✅ TOP 20 stocks populated
-
-## 🎯 Architecture
+**Supervisor → 6 Sub-Agents** using LangGraph + Mosaic AI Agent Framework.
 
 ```
-User Query
-    ↓
-RiskBricksAgent (ResponsesAgent)
-    ↓
-┌─────────────────────┐
-│  LLM Call           │ ← Foundation Model (Llama 3.3 70B)
-│  (OpenAI SDK)       │
-└─────────────────────┘
-    ↓
-┌─────────────────────┐
-│  Tool Execution     │ ← Unity Catalog Functions
-│  (UCFunctionToolkit)│
-└─────────────────────┘
-    ↓
-Agent Loop (max 10 iterations)
-    ↓
-Structured Response (with tracing)
+User Question
+    │
+    ▼
+Supervisor Agent (Llama 3.3 70B)
+    │
+    ├──▶ Risk Agent           → get_portfolio_risk_metrics, get_stress_test_results
+    ├──▶ Price Target Agent   → get_stock_forecast
+    ├──▶ ML Direction Agent   → get_ml_stock_forecast, get_ml_market_overview
+    ├──▶ Factor Agent         → get_factor_exposures, get_sector_exposures
+    ├──▶ Decision Agent       → get_decision_signal, get_macro_context
+    └──▶ News Agent           → get_news_context, get_portfolio_holdings
 ```
 
-## 🧪 Example Interactions
+## Deployment
 
-### Forecast Agent
-**User:** "What is the forecast for NVDA?"  
-**Agent:** "Based on 4 models (GBM, Ridge, Mean, News), consensus is $142.80 (±$8.50). Models show strong agreement..."
+**Endpoint**: `riskbricks-supervisor-agent` (always-on)
+**Model**: `riskbricks.agents.riskbricks_agent`
+**LLM**: Llama 3.3 70B (Databricks Foundation Model API)
 
-### Risk Agent
-**User:** "Risk profile of TSLA?"  
-**Agent:** "TSLA volatility: 42% (Very High), VaR(95%): -4.8%, Beta: 1.85. Recommend position size < 2%..."
+### Steps
 
-### Decision Agent
-**User:** "Should I buy MSFT?"  
-**Agent:** "BUY. Expected return +2.8%, risk-adjusted 0.18, positive earnings surprise. Suggested allocation: 3-5%..."
+1. Register UC functions: `notebooks/agents/01_register_uc_tools.py`
+2. Create agent model: `notebooks/agents/02_create_agent.py`
+3. Deploy to endpoint: `notebooks/agents/03_deploy_agent.py`
 
-### Supervisor Agent
-**User:** "Top 3 opportunities?"  
-**Agent:** "1. NVDA (STRONG BUY, +4.2%), 2. MSFT (BUY, +2.8%), 3. GOOGL (BUY, +2.1%)..."
+## Agent Files
 
-## 🔍 Monitoring
+| File | Purpose |
+|------|---------|
+| `notebooks/agents/riskbricks_agent.py` | Agent logic: 6 sub-agents, supervisor routing, prompts |
+| `notebooks/agents/01_register_uc_tools.py` | Registers 11 UC functions in `{catalog}.agent_tools` |
+| `notebooks/agents/02_create_agent.py` | Creates agent model + logs to Unity Catalog |
+| `notebooks/agents/03_deploy_agent.py` | Deploys agent to serving endpoint |
 
-### MLflow Traces
-**Machine Learning → Experiments → [agent] → Traces**
-- Full conversation history
-- Tool calls (args, results, latency)
-- LLM calls (tokens, latency)
+## 11 UC Functions
 
-### Endpoint Metrics
-**Machine Learning → Serving → [endpoint]**
-- Request rate
-- Latency (p50, p95, p99)
-- Error rate
+| Function | Gold Table Queried | Agent |
+|----------|--------------------|-------|
+| `get_portfolio_risk_metrics` | portfolio_risk_metrics | Risk |
+| `get_stress_test_results` | stress_test_results | Risk |
+| `get_stock_forecast` | stock_forecasts | Price Target |
+| `get_ml_stock_forecast` | ml_stock_predictions | ML Direction |
+| `get_ml_market_overview` | ml_stock_predictions | ML Direction |
+| `get_factor_exposures` | risk_factor_exposures | Factor |
+| `get_sector_exposures` | sector_exposures | Factor |
+| `get_decision_signal` | decision_signals | Decision |
+| `get_macro_context` | macro_indicators_daily | Decision |
+| `get_news_context` | bronze.news_rss_all | News |
+| `get_portfolio_holdings` | portfolio_holdings, portfolio_managers | News |
 
-## 🛠️ Troubleshooting
+## Example Interaction
 
-### Agent returns empty response
-1. Check MLflow traces for errors
-2. Test UC function directly: `SELECT riskbricks.tools.get_latest_forecast('AAPL', '2026-02-06')`
-3. Verify data in tables
-
-### Foundation Model not found
-```python
-from databricks.sdk import WorkspaceClient
-w = WorkspaceClient()
-print([e.name for e in w.serving_endpoints.list()])
 ```
-Use exact name from output.
+User: "Should I sell NVDA?"
 
-### UC function not found
-```sql
-SHOW USER FUNCTIONS IN riskbricks.tools;
+1. Supervisor routes to Decision Agent → calls get_decision_signal('NVDA')
+2. Supervisor routes to ML Direction Agent → calls get_ml_stock_forecast('NVDA')
+3. Supervisor synthesizes: "HOLD NVDA — composite score 72/100, ML predicts UP with 68% confidence"
 ```
-If missing, run `create_all_uc_functions.py`.
-
-**More troubleshooting:** `docs/QUICK_START_OFFICIAL.md` (bottom section)
-
-## 📊 Performance
-
-- **Cold start:** ~30s (scale-to-zero)
-- **Warm latency:** 2-5s
-- **Tool execution:** <1s per call
-- **Cost when idle:** $0
-
-## 🎓 Why This Pattern?
-
-### ✅ Official Databricks Pattern
-- Exported by AI Playground
-- Taught in training courses
-- Used in production at scale
-
-### ✅ Production-Ready
-- Built-in MLflow tracing
-- Automatic auth passthrough
-- Scale-to-zero support
-- Error handling
-
-### ✅ Maintainable
-- Stable APIs
-- Clear separation of concerns
-- Version controlled
-- Comprehensive docs
-
-### ❌ NOT LangChain
-LangChain has:
-- Version fragility
-- Import errors
-- Complex abstractions
-- Not officially recommended by Databricks
-
-## 🔗 Quick Links
-
-| Resource | Path |
-|----------|------|
-| Quick Start Guide | `docs/QUICK_START_OFFICIAL.md` |
-| Technical Reference | `docs/OFFICIAL_AGENT_IMPLEMENTATION.md` |
-| Deployment Script | `scripts/deploy_official_agents.sh` |
-| Agent Base Code | `notebooks/mosaic_agents/agent_base.py` |
-| Deployment Notebook | `notebooks/mosaic_agents/deploy_agents_official_pattern.py` |
-| Training Review | `docs/COMPLETE_TRAINING_REVIEW.md` |
-| Summit Proposal | `docs/dais/DATABRICKS_SUMMIT_2026_PROPOSAL.md` |
-
-## 🚦 Current Status
-
-| Component | Status |
-|-----------|--------|
-| Data Pipeline | ✅ Production Ready |
-| UC Functions (10 tools) | ✅ Deployed |
-| Agent Implementation | ✅ Complete |
-| Documentation | ✅ Comprehensive |
-| Deployment Automation | ✅ Ready |
-| Testing Examples | ✅ Provided |
-| **Overall** | **✅ Ready to Deploy** |
-
-## 🎬 Next Steps
-
-1. **Deploy agents** (follow Quick Start above)
-2. **Test in AI Playground**
-3. **Review MLflow traces**
-4. **Submit Databricks Summit proposal**
-
-## 📞 Support
-
-- **Technical issues:** See `docs/OFFICIAL_AGENT_IMPLEMENTATION.md` (Troubleshooting section)
-- **Deployment issues:** See `docs/QUICK_START_OFFICIAL.md` (Troubleshooting section)
-- **Architecture questions:** See `docs/COMPLETE_TRAINING_REVIEW.md`
-
----
-
-**Built with:**
-- MLflow ResponsesAgent
-- databricks-openai (UCFunctionToolkit)
-- databricks-agents (deploy SDK)
-- Databricks Foundation Models
-- Unity Catalog
-
-**Ready to deploy! 🚀**

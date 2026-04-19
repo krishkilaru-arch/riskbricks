@@ -9,7 +9,8 @@
 
 # COMMAND ----------
 
-catalog = "riskbricks"
+dbutils.widgets.text("catalog", "riskbricks")
+catalog = dbutils.widgets.get("catalog").strip()
 schema  = "agent_tools"
 
 spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")

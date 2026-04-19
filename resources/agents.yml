@@ -8,7 +8,7 @@ resources:
       tasks:
         - task_key: deploy_forecast_agent
           notebook_task:
-            notebook_path: ../notebooks/mosaic_agents/deploy_agents_simple
+            notebook_path: ../notebooks/agents/03_deploy_agent
             base_parameters:
               agent_type: forecast
               catalog: ${var.catalog}
@@ -20,7 +20,7 @@ resources:
           depends_on:
             - task_key: deploy_forecast_agent
           notebook_task:
-            notebook_path: ../notebooks/mosaic_agents/test_agent
+            notebook_path: ../notebooks/agents/02_create_agent
             base_parameters:
               agent_name: ${var.catalog}.${var.schema}.forecast_agent
           existing_cluster_id: ${var.cluster_id}

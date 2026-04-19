@@ -9,8 +9,13 @@
 
 # COMMAND ----------
 
+dbutils.widgets.text("catalog", "riskbricks")
+catalog = dbutils.widgets.get("catalog").strip()
+print(f"Using catalog: {catalog}")
+
+# COMMAND ----------
+
 # MAGIC %pip install -U -qq databricks-langchain unitycatalog-langchain[databricks] mlflow>=2.13.1 databricks-agents langchain langchain-community
-# MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -42,7 +47,13 @@ assert os.path.exists(_agent_file), f"Agent file not found: {_agent_file}"
 
 # Import the agent
 sys.path.insert(0, f"/Workspace{_agents_dir}")
-from riskbricks_agent import agent, tools
+from riskbricks_agent import (
+    multi_agent_graph as agent,
+    RISK_TOOLS, PRICE_TARGET_TOOLS, FACTOR_TOOLS,
+    DECISION_TOOLS, NEWS_TOOLS, ML_DIRECTION_TOOLS,
+)
+
+tools = RISK_TOOLS + PRICE_TARGET_TOOLS + FACTOR_TOOLS + DECISION_TOOLS + NEWS_TOOLS + ML_DIRECTION_TOOLS
 
 print(f"✅ Agent loaded with {len(tools)} tools:")
 for t in tools:
@@ -118,6 +129,7 @@ test_query("Give me a complete risk report for Mohit Arora — holdings, sector 
 
 # DBTITLE 1,Log agent to MLflow
 import mlflow
+from mlflow.models.resources import DatabricksFunction, DatabricksServingEndpoint
 
 # Set experiment
 experiment_name = "/Users/" + spark.sql("SELECT current_user()").first()[0] + "/riskbricks_agent"
@@ -127,13 +139,31 @@ input_example = {
     "messages": [{"role": "user", "content": "What is the portfolio risk for Sarah Russel?"}]
 }
 
-with mlflow.start_run(run_name="riskbricks_agent_v1") as run:
+# Declare all resource dependencies for automatic authentication passthrough
+# This ensures the system service principal gets the right UC grants automatically
+resources = [
+    DatabricksServingEndpoint(endpoint_name="databricks-meta-llama-3-3-70b-instruct"),
+    DatabricksFunction(function_name=f"{catalog}.agent_tools.get_portfolio_risk_metrics"),
+    DatabricksFunction(function_name=f"{catalog}.agent_tools.get_stress_test_results"),
+    DatabricksFunction(function_name=f"{catalog}.agent_tools.get_portfolio_holdings"),
+    DatabricksFunction(function_name=f"{catalog}.agent_tools.get_sector_exposures"),
+    DatabricksFunction(function_name=f"{catalog}.agent_tools.get_factor_exposures"),
+    DatabricksFunction(function_name=f"{catalog}.agent_tools.get_stock_forecast"),
+    DatabricksFunction(function_name=f"{catalog}.agent_tools.get_decision_signal"),
+    DatabricksFunction(function_name=f"{catalog}.agent_tools.get_macro_context"),
+    DatabricksFunction(function_name=f"{catalog}.agent_tools.get_news_context"),
+    DatabricksFunction(function_name=f"{catalog}.agent_tools.get_ml_stock_forecast"),
+    DatabricksFunction(function_name=f"{catalog}.agent_tools.get_ml_market_overview"),
+]
+
+with mlflow.start_run(run_name="riskbricks_agent_ml_direction") as run:
     model_info = mlflow.langchain.log_model(
         lc_model=os.path.join(f"/Workspace{_agents_dir}", "riskbricks_agent.py"),
         name="riskbricks_agent",
         input_example=input_example,
+        resources=resources,
     )
-    print(f"✅ Agent logged to MLflow")
+    print(f"✅ Agent logged to MLflow (with {len(resources)} resource dependencies)")
     print(f"   Run ID:    {run.info.run_id}")
     print(f"   Model URI: {model_info.model_uri}")
 
@@ -141,17 +171,16 @@ with mlflow.start_run(run_name="riskbricks_agent_v1") as run:
 
 # DBTITLE 1,Verify loaded model
 # Verify the logged model loads correctly
-loaded_agent = mlflow.langchain.load_model(model_info.model_uri)
-result = loaded_agent.invoke(
-    {"messages": [{"role": "user", "content": "How many managers do we have and what are their risk profiles?"}]}
-)
-messages = result.get("messages", []) if isinstance(result, dict) else []
-ai_msgs = [m for m in messages if hasattr(m, 'type') and m.type == 'ai' and m.content]
-if ai_msgs:
-    print(f"\n✅ Loaded model test passed")
-    print(f"   Response: {ai_msgs[-1].content[:300]}...")
-else:
-    print(f"✅ Model loaded, response: {str(result)[:300]}")
+# Note: RiskBricksSupervisor is a ChatAgent — local predict() doesn't work
+# through the langchain loader. Full prediction test happens on the serving
+# endpoint (cell 21). Here we verify the artifact metadata.
+model_metadata = mlflow.models.get_model_info(model_info.model_uri)
+
+print(f"✅ Model artifact verified")
+print(f"   Flavors:   {list(model_metadata.flavors.keys())}")
+print(f"   Signature: {model_metadata.signature}")
+print(f"   Model URI: {model_info.model_uri}")
+print(f"   Run ID:    {run.info.run_id}")
 
 # COMMAND ----------
 
@@ -160,10 +189,23 @@ else:
 
 # COMMAND ----------
 
-uc_model_name = "riskbricks.agents.riskbricks_agent"
+uc_model_name = f"{catalog}.agents.riskbricks_agent"
 
 # Ensure schema exists
-spark.sql("CREATE SCHEMA IF NOT EXISTS riskbricks.agents")
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.agents")
+
+# UC requires a model signature — set it on the already-logged model
+from mlflow.models import ModelSignature
+try:
+    from mlflow.types.llm import ChatParams, ChatCompletionResponse
+    signature = ModelSignature(inputs=ChatParams(), outputs=ChatCompletionResponse())
+except Exception:
+    from mlflow.models.signature import infer_signature
+    signature = infer_signature(
+        {"messages": [{"role": "user", "content": "test"}]},
+        {"choices": [{"index": 0, "message": {"role": "assistant", "content": "test"}, "finish_reason": "stop"}]},
+    )
+mlflow.models.set_signature(model_info.model_uri, signature)
 
 uc_model_info = mlflow.register_model(
     model_uri=model_info.model_uri,
@@ -181,130 +223,15 @@ dbutils.notebook.exit(f'{{"model_name": "{uc_model_name}", "version": "{uc_model
 
 # COMMAND ----------
 
-# DBTITLE 1,Deploy header
-# MAGIC %md
-# MAGIC ## Deploy to Serving Endpoint
-
-# COMMAND ----------
-
-# DBTITLE 1,Deploy agent to serving endpoint
-# Re-log with explicit ChatCompletion signature for agents.deploy() compatibility
-from mlflow.models import ModelSignature
-
-try:
-    from mlflow.types.llm import ChatParams, ChatCompletionResponse
-    signature = ModelSignature(
-        inputs=ChatParams(),
-        outputs=ChatCompletionResponse(),
-    )
-    print("✅ Using ChatParams/ChatCompletionResponse signature")
-except Exception:
-    # Fallback for older MLflow versions
-    from mlflow.models.signature import infer_signature
-    input_ex = {"messages": [{"role": "user", "content": "test"}]}
-    output_ex = {
-        "choices": [{"index": 0, "message": {"role": "assistant", "content": "test"}, "finish_reason": "stop"}]
-    }
-    signature = infer_signature(input_ex, output_ex)
-    print("✅ Using inferred signature (fallback)")
-
-# Re-log with proper signature
-with mlflow.start_run(run_name="riskbricks_agent_v2_deploy") as run2:
-    model_info2 = mlflow.langchain.log_model(
-        lc_model=os.path.join(f"/Workspace{_agents_dir}", "riskbricks_agent.py"),
-        name="riskbricks_agent",
-        input_example={"messages": [{"role": "user", "content": "What is Sarah Russel's portfolio risk?"}]},
-        signature=signature,
-    )
-    print(f"✅ Re-logged with ChatCompletion signature")
-    print(f"   Run ID:    {run2.info.run_id}")
-    print(f"   Model URI: {model_info2.model_uri}")
-
-# Re-register new version
-uc_model_info2 = mlflow.register_model(
-    model_uri=model_info2.model_uri,
-    name=uc_model_name,
-)
-print(f"✅ Registered v{uc_model_info2.version} in UC")
-
-# Deploy
-from databricks import agents
-
-deployment = agents.deploy(
-    uc_model_name,
-    uc_model_info2.version,
-)
-
-print(f"\n✅ Agent deployed successfully!")
-print(f"   Endpoint:   {deployment.endpoint_name}")
-print(f"   Query URL:  {deployment.query_endpoint}")
-
-# COMMAND ----------
-
-# DBTITLE 1,Test the deployed endpoint
-import requests, json
-
-# Get workspace URL and token
-ctx = dbutils.entry_point.getDbutils().notebook().getContext()
-host = ctx.apiUrl().get()
-token = ctx.apiToken().get()
-
-print(f"Testing endpoint: {deployment.endpoint_name}")
-print(f"Note: endpoint may take 5-10 min to become ready after initial deployment.\n")
-
-response = requests.post(
-    f"{host}/serving-endpoints/{deployment.endpoint_name}/invocations",
-    headers={
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    },
-    json={
-        "messages": [
-            {"role": "user", "content": "Compare portfolio risk for all three managers. Show VaR, beta, and volatility."}
-        ]
-    },
-    timeout=120,
-)
-
-if response.status_code == 200:
-    result = response.json()
-    print("✅ Endpoint responded successfully:")
-    if "choices" in result:
-        print(result["choices"][0]["message"]["content"])
-    else:
-        print(json.dumps(result, indent=2)[:1500])
-else:
-    print(f"⚠️ Status {response.status_code}")
-    print(f"   {response.text[:500]}")
-    print(f"\n💡 If 'NOT_READY', wait a few minutes and re-run this cell.")
-
-# COMMAND ----------
-
-# DBTITLE 1,Print endpoint info
-host = dbutils.entry_point.getDbutils().notebook().getContext().apiUrl().get()
-
+# Final summary — deployment is handled by 03_deploy_agent
 print(f"""
 {'='*60}
-🚀 RISKBRICKS AGENT DEPLOYMENT COMPLETE
+✅ AGENT CREATION COMPLETE
 {'='*60}
 
-Endpoint Name:  {deployment.endpoint_name}
-Query URL:      {deployment.query_endpoint}
+Model:     {uc_model_name} v{uc_model_info.version}
+Run ID:    {run.info.run_id}
 
-Review App: Check the MLflow experiment for the Review App link.
-
-Usage (Python SDK):
-  from databricks.sdk import WorkspaceClient
-  w = WorkspaceClient()
-  response = w.serving_endpoints.query(
-      name="{deployment.endpoint_name}",
-      messages=[{{"role": "user", "content": "your question"}}]
-  )
-
-Usage (REST API):
-  curl -X POST {host}/serving-endpoints/{deployment.endpoint_name}/invocations \\
-    -H "Authorization: Bearer $TOKEN" \\
-    -H "Content-Type: application/json" \\
-    -d '{{"messages": [{{"role": "user", "content": "your question"}}]}}'
+Next Step: Run 03_deploy_agent to deploy the serving endpoint.
 {'='*60}
 """)

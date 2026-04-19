@@ -10,7 +10,6 @@
 # MAGIC ## Tables Created:
 # MAGIC 1. `company_universe` - Master list of all Fortune 500 companies
 # MAGIC 2. `portfolio_managers` - Manager profiles and risk parameters
-# MAGIC 3. `portfolios` - Portfolio metadata and performance
 # MAGIC 4. `portfolio_holdings` - Actual stock positions per portfolio
 
 # COMMAND ----------
@@ -264,12 +263,12 @@ try:
     # Get all unique symbols from stock prices (silver or bronze)
     try:
         all_stock_symbols = spark.sql("""
-            SELECT DISTINCT symbol FROM riskbricks.silver.stock_prices
+            SELECT DISTINCT symbol FROM {catalog}.silver.stock_prices
         """)
         source_table = "silver.stock_prices"
     except:
         all_stock_symbols = spark.sql("""
-            SELECT DISTINCT symbol FROM riskbricks.bronze.stock_prices_bronze
+            SELECT DISTINCT symbol FROM {catalog}.bronze.stock_prices_bronze
         """)
         source_table = "bronze.stock_prices_bronze"
     
@@ -601,7 +600,6 @@ print(f"   Total AUM: ${holdings_df.agg(F.sum('value_usd')).collect()[0][0]:,.0f
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 4. Create Portfolios Metadata Table
 
 # COMMAND ----------
 
@@ -653,8 +651,6 @@ spark.sql(f"SELECT COUNT(*) as companies, COUNT(DISTINCT sector) as sectors FROM
 print(f"\n2. Portfolio Managers: {catalog}.{schema}.portfolio_managers")
 spark.sql(f"SELECT manager_name, risk_profile, target_return_pct FROM {catalog}.{schema}.portfolio_managers").show(truncate=False)
 
-print(f"\n3. Portfolios: {catalog}.{schema}.portfolios")
-spark.sql(f"SELECT portfolio_name, total_value, num_holdings FROM {catalog}.{schema}.portfolios").show(truncate=False)
 
 print(f"\n4. Portfolio Holdings: {catalog}.{schema}.portfolio_holdings")
 spark.sql(f"""
@@ -738,4 +734,3 @@ spark.sql(f"""
 # COMMAND ----------
 
 dbutils.notebook.exit("success")
-

@@ -2,19 +2,16 @@
 # MAGIC %md
 # MAGIC # 📰 GDELT Daily Ingestion (Bronze)
 # MAGIC
-# MAGIC **Purpose**: Download daily GDELT Events (and optional GKG) for the selected date range,
 # MAGIC filter to the `company_universe`, and write to Bronze with safe `replaceWhere`.
 # MAGIC
 # MAGIC **Outputs**:
 # MAGIC - `riskbricks.bronze.historical_news_gdelt` (partitioned by `event_date`, `symbol`)
-# MAGIC - `riskbricks.bronze.historical_news_gdelt_gkg` (optional, partitioned by `event_date`, `symbol`)
 
 # COMMAND ----------
 
 # Widgets
 dbutils.widgets.text("start_date", "", "Start Date (YYYY-MM-DD)")
 dbutils.widgets.text("end_date", "", "End Date (YYYY-MM-DD)")
-dbutils.widgets.dropdown("include_gkg", "true", ["true"], "Include GKG (required)")
 
 # COMMAND ----------
 
@@ -50,7 +47,7 @@ except Exception:
 
 symbols_df = spark.sql("""
     SELECT DISTINCT symbol, company_name, sector
-    FROM riskbricks.gold.company_universe
+    FROM {catalog}.gold.company_universe
     ORDER BY symbol
 """)
 
@@ -128,10 +125,8 @@ else:
 if end_date < start_date:
     raise ValueError("end_date must be on or after start_date.")
 
-include_gkg = True
 
 print(f"📅 Date range (ET): {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-print("📦 Include GKG: true (required)")
 
 # COMMAND ----------
 
@@ -150,9 +145,7 @@ def get_event_url(date_obj):
     date_str = date_obj.strftime("%Y%m%d")
     return date_str, f"http://data.gdeltproject.org/events/{date_str}.export.CSV.zip"
 
-def get_gkg_url(date_obj):
     date_str = date_obj.strftime("%Y%m%d")
-    return date_str, f"http://data.gdeltproject.org/gkg/{date_str}.gkg.csv.zip"
 
 # COMMAND ----------
 
@@ -233,16 +226,13 @@ def process_event_day(date_str, url, keyword_map):
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 📰 Process GDELT GKG (Optional)
 
 # COMMAND ----------
 
-def _extract_gkg_fields(parts):
     def safe_get(idx):
         return parts[idx] if len(parts) > idx else ""
 
     return {
-        "gkg_record_id": safe_get(0),
         "event_date": safe_get(1),
         "source_collection_id": safe_get(2),
         "source_common_name": safe_get(3),
@@ -254,7 +244,6 @@ def _extract_gkg_fields(parts):
         "raw_record": "\t".join(parts[:20]),
     }
 
-def process_gkg_day(date_str, url, keyword_map):
     rows = []
     try:
         resp = requests.get(url, timeout=60)
@@ -268,7 +257,6 @@ def process_gkg_day(date_str, url, keyword_map):
                 for line in f:
                     try:
                         parts = line.decode("utf-8", errors="ignore").strip().split("\t")
-                        fields = _extract_gkg_fields(parts)
                         text_blob = " ".join([
                             fields.get("themes", ""),
                             fields.get("organizations", ""),
@@ -282,7 +270,6 @@ def process_gkg_day(date_str, url, keyword_map):
 
                         for symbol in matched_symbols:
                             rows.append({
-                                "gkg_record_id": fields["gkg_record_id"],
                                 "event_date": fields["event_date"],
                                 "symbol": symbol,
                                 "company_name": symbol_to_company.get(symbol, symbol),
@@ -303,7 +290,6 @@ def process_gkg_day(date_str, url, keyword_map):
         print(f"❌ {date_str}: {exc}")
         return rows
 
-    print(f"✅ {date_str}: {len(rows)} GKG records")
     return rows
 
 # COMMAND ----------
@@ -341,14 +327,11 @@ def write_partitioned_table(table_name, df, start_dt, end_dt, partition_cols=("e
 # COMMAND ----------
 
 all_events = []
-all_gkg = []
 
 for day in _date_range(start_date, end_date):
     date_str, url = get_event_url(day)
     all_events.extend(process_event_day(date_str, url, keyword_map))
 
-    gkg_date_str, gkg_url = get_gkg_url(day)
-    all_gkg.extend(process_gkg_day(gkg_date_str, gkg_url, keyword_map))
 
 if not all_events:
     dbutils.notebook.exit("No GDELT events found for this range.")
@@ -382,11 +365,7 @@ events_df = events_df \
     .withColumn("date_is_reliable", F.col("event_date_parsed").isNotNull()) \
     .drop("event_date_parsed", "source_file_date_parsed")
 
-if not all_gkg:
-    dbutils.notebook.exit("No GDELT GKG records found for this range.")
 
-gkg_schema = StructType([
-    StructField("gkg_record_id", StringType(), True),
     StructField("event_date", StringType(), True),
     StructField("symbol", StringType(), True),
     StructField("company_name", StringType(), True),
@@ -402,8 +381,6 @@ gkg_schema = StructType([
     StructField("ingestion_timestamp", TimestampType(), True),
 ])
 
-gkg_df = spark.createDataFrame(all_gkg, schema=gkg_schema)
-gkg_df = gkg_df \
     .withColumn("event_date_parsed", F.expr("try_to_date(substr(CAST(event_date AS STRING), 1, 8), 'yyyyMMdd')")) \
     .withColumn("source_file_date_parsed", F.expr("try_to_date(CAST(source_file_date AS STRING), 'yyyyMMdd')")) \
     .withColumn(
@@ -413,16 +390,10 @@ gkg_df = gkg_df \
     .withColumn("date_is_reliable", F.col("event_date_parsed").isNotNull()) \
     .drop("event_date_parsed", "source_file_date_parsed")
 
-# Fill missing event source_url with GKG document_identifier when available
-gkg_urls = gkg_df \
     .filter(F.col("document_identifier").rlike("^https?://")) \
     .groupBy("event_date", "symbol") \
-    .agg(F.first("document_identifier", ignorenulls=True).alias("gkg_url"))
 
 events_df = events_df \
-    .join(gkg_urls, on=["event_date", "symbol"], how="left") \
-    .withColumn("source_url", F.coalesce(F.col("source_url"), F.col("gkg_url"))) \
-    .drop("gkg_url")
 
 events_table = f"{catalog}.bronze.historical_news_gdelt"
 write_partitioned_table(events_table, events_df, start_date, end_date)
@@ -449,22 +420,14 @@ events_profile = spark.sql(f"""
 """)
 events_profile.show(50, truncate=False)
 
-gkg_table = f"{catalog}.bronze.historical_news_gdelt_gkg"
-write_partitioned_table(gkg_table, gkg_df, start_date, end_date)
-spark.sql(f"COMMENT ON TABLE {gkg_table} IS 'GDELT GKG records filtered by company_universe'")
-print(f"✅ Saved GKG to {gkg_table}")
 
-# Quick profile for GKG
-gkg_profile = spark.sql(f"""
     SELECT
       symbol,
       COUNT(*) AS rows,
       MIN(event_date) AS min_date,
       MAX(event_date) AS max_date
-    FROM {gkg_table}
     GROUP BY symbol
     ORDER BY symbol
 """)
-gkg_profile.show(50, truncate=False)
 
 dbutils.notebook.exit(f"✅ GDELT ingestion complete: {len(all_events)} events")

@@ -29,7 +29,6 @@ dbutils.widgets.text("finnhub_market_categories", "general,forex,crypto,merger,e
 # COMMAND ----------
 
 # MAGIC %pip install feedparser beautifulsoup4 requests lxml wikipedia-api
-# MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -80,7 +79,7 @@ print(f"✅ Finnhub market categories: {finnhub_market_categories}")
 
 symbols_df = spark.sql("""
     SELECT DISTINCT symbol, company_name, sector
-    FROM riskbricks.gold.company_universe
+    FROM {catalog}.gold.company_universe
     ORDER BY symbol
 """)
 
