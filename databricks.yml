@@ -17,6 +17,10 @@ variables:
     description: "Unity Catalog name"
     default: riskbricks
 
+sync:
+  exclude:
+    - _archived/
+
 targets:
   dev:
     mode: development

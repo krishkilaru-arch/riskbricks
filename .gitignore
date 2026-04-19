@@ -102,6 +102,9 @@ scratch/
 *.scratch.py
 to-be-delete/
 
+# Archived files (excluded from deployment)
+_archived/
+
 # Proposal workspace noise (keep core product and deployment docs)
 docs/SESSION_SUMMARY_*.md
 docs/LESSONS_LEARNED.md
