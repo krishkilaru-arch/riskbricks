@@ -18,8 +18,10 @@
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 🔧 Setup and Configuration
+from config import STRESS_SCENARIOS
+
+%md
+## 🔧 Setup and Configuration
 
 # COMMAND ----------
 
@@ -565,4 +567,3 @@ display(spark.sql(f"""
 # COMMAND ----------
 
 dbutils.notebook.exit("success")
-

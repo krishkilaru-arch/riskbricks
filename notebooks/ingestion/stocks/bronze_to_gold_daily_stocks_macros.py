@@ -21,6 +21,10 @@
 
 # COMMAND ----------
 
+from config import FRED_SERIES as _FRED_SERIES
+from config.riskbricks_config import cfg as _cfg
+
+
 # Install required libraries
 %pip install yfinance requests pandas
 
@@ -50,7 +54,7 @@ print("✅ Libraries imported successfully")
 
 # FRED API Key - Databricks secret
 try:
-    FRED_API_KEY = dbutils.secrets.get(scope="riskbricks", key="fred-api-key").strip()
+    FRED_API_KEY = dbutils.secrets.get(scope=_cfg.SECRETS_SCOPE, key=_cfg.FRED_API_KEY_SECRET).strip()
     print("✅ Using FRED API key from secrets")
 except Exception as exc:
     raise ValueError("Missing Databricks secret: scope=riskbricks key=fred-api-key") from exc
@@ -248,12 +252,7 @@ print("📊 Fetching macro economic indicators from FRED...")
 
 # Define indicators to fetch
 fred_indicators = {
-    "FEDFUNDS": "Federal Funds Effective Rate",
-    "CPIAUCSL": "Consumer Price Index",
-    "UNRATE": "Unemployment Rate",
-    "GDP": "Gross Domestic Product",
-    "DGS10": "10-Year Treasury Constant Maturity Rate",
-    "VIXCLS": "CBOE Volatility Index (VIX)"
+    **_FRED_SERIES  # loaded from config
 }
 
 # Fetch all indicators

@@ -10,7 +10,8 @@ catalog = dbutils.widgets.get("catalog").strip()
 # COMMAND ----------
 
 # DBTITLE 1,Install dependencies
-# MAGIC %pip install -U -qq databricks-agents>=0.16.0 mlflow>=2.20.2 langgraph databricks-langchain
+# MAGIC %pip install -U -qq databricks-agents>=0.16.0 mlflow>=2.20.2 langgraph databricks-langchain typing_extensions>=4.12
+# MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -89,9 +90,12 @@ except NameError:
 print(f"Agent file: {agent_file}")
 assert os.path.exists(agent_file), f"Agent file not found: {agent_file}"
 
+# LLM endpoint name (matches the inline default in riskbricks_agent.py)
+_LLM_ENDPOINT = "databricks-meta-llama-3-3-70b-instruct"
+
 # Declare all dependent resources for governance
 resources = [
-    DatabricksServingEndpoint(endpoint_name="databricks-meta-llama-3-3-70b-instruct"),
+    DatabricksServingEndpoint(endpoint_name=_LLM_ENDPOINT),
     DatabricksFunction(function_name=f"{catalog}.agent_tools.get_portfolio_risk_metrics"),
     DatabricksFunction(function_name=f"{catalog}.agent_tools.get_stress_test_results"),
     DatabricksFunction(function_name=f"{catalog}.agent_tools.get_portfolio_holdings"),
@@ -107,16 +111,35 @@ resources = [
 
 input_example = {"messages": [{"role": "user", "content": "What is Mohit Arora's portfolio risk?"}]}
 
+# Explicit pip requirements — excludes delta-spark which is a
+# Databricks-internal build (v3.4.0 doesn't exist on public PyPI)
+# and is NOT needed at serving time (agent uses UC functions, not Spark)
+_pip_requirements = [
+    "mlflow>=3.11",
+    "langgraph",
+    "langchain-core",
+    "databricks-langchain>=0.18",
+    "databricks-agents>=1.9",
+    "databricks-connect>=16.4",
+    "unitycatalog-ai[databricks]",
+    "cloudpickle>=3.0",
+    "aiohttp>=3.11",
+    "typing_extensions>=4.12",
+    "cryptography>=44.0",
+]
+
 with mlflow.start_run(run_name="riskbricks_supervisor_clean_deploy") as run:
     model_info = mlflow.pyfunc.log_model(
         python_model=agent_file,
         name="riskbricks_agent",
         input_example=input_example,
         resources=resources,
+        pip_requirements=_pip_requirements,
     )
-    print(f"✅ Model logged (pyfunc + ChatAgent wrapper)")
+    print(f"\u2705 Model logged (pyfunc + ChatAgent wrapper)")
     print(f"   Run ID:    {run.info.run_id}")
     print(f"   Model URI: {model_info.model_uri}")
+    print(f"   Pip reqs:  {len(_pip_requirements)} packages (delta-spark excluded)")
 
 # Register to Unity Catalog
 from mlflow import MlflowClient
@@ -127,67 +150,38 @@ uc_info = client.create_model_version(
     run_id=run.info.run_id,
 )
 latest_version = int(uc_info.version)
-print(f"\n✅ Registered as {UC_MODEL_NAME} v{latest_version}")
+print(f"\n\u2705 Registered as {UC_MODEL_NAME} v{latest_version}")
 
 # COMMAND ----------
 
 # DBTITLE 1,Deploy to serving endpoint
+from databricks import agents
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.serving import (
-    EndpointCoreConfigInput,
-    ServedEntityInput,
-    AiGatewayConfig,
-    AiGatewayInferenceTableConfig,
-)
 
 ENDPOINT_NAME = "riskbricks-supervisor-agent"
 w = WorkspaceClient()
 
+# Delete stale endpoint (left in broken state by failed v19 deployment)
 try:
-    endpoint = w.serving_endpoints.create(
-        name=ENDPOINT_NAME,
-        config=EndpointCoreConfigInput(
-            name=ENDPOINT_NAME,
-            served_entities=[
-                ServedEntityInput(
-                    entity_name=UC_MODEL_NAME,
-                    entity_version=str(latest_version),
-                    workload_size="Small",
-                    scale_to_zero_enabled=False,
-                )
-            ],
-        ),
-        ai_gateway=AiGatewayConfig(
-            inference_table_config=AiGatewayInferenceTableConfig(
-                catalog_name="riskbricks",
-                schema_name="agents",
-                table_name_prefix="supervisor_agent",
-                enabled=True,
-            ),
-        ),
-    )
-    print(f"\n✅ Endpoint '{ENDPOINT_NAME}' created!")
-    print(f"   Model:   {UC_MODEL_NAME} v{latest_version}")
-    print(f"   Size:    Small / scale-to-zero OFF")
-    print(f"   Logging: AI Gateway inference table enabled")
-    print(f"   Status:  Deployment in progress (10-20 min)")
+    w.serving_endpoints.delete(name=ENDPOINT_NAME)
+    print(f"Deleted stale endpoint '{ENDPOINT_NAME}'")
+    import time; time.sleep(10)  # brief pause for cleanup
 except Exception as e:
-    if "already exists" in str(e).lower():
-        print(f"ℹ️  Endpoint '{ENDPOINT_NAME}' already exists. Updating config...")
-        w.serving_endpoints.update_config(
-            name=ENDPOINT_NAME,
-            served_entities=[
-                ServedEntityInput(
-                    entity_name=UC_MODEL_NAME,
-                    entity_version=str(latest_version),
-                    workload_size="Small",
-                    scale_to_zero_enabled=False,
-                )
-            ],
-        )
-        print(f"   ✅ Config updated to v{latest_version}")
-    else:
-        raise
+    print(f"Endpoint cleanup: {e}")
+
+print(f"Deploying {UC_MODEL_NAME} v{latest_version} to '{ENDPOINT_NAME}'...")
+
+deployment = agents.deploy(
+    model_name=UC_MODEL_NAME,
+    model_version=latest_version,
+    endpoint_name=ENDPOINT_NAME,
+    scale_to_zero=False,
+)
+
+print(f"Deployment initiated!")
+print(f"   Model:    {UC_MODEL_NAME} v{latest_version}")
+print(f"   Endpoint: {ENDPOINT_NAME}")
+print(f"   Status:   Creating fresh endpoint (10-15 min)...")
 
 # COMMAND ----------
 
@@ -200,7 +194,7 @@ ctx = dbutils.entry_point.getDbutils().notebook().getContext()
 host = ctx.apiUrl().get()
 token = ctx.apiToken().get()
 
-print(f"⏳ Waiting for endpoint '{ENDPOINT_NAME}' to become ready...")
+print(f"Waiting for endpoint '{ENDPOINT_NAME}' to become ready...")
 for i in range(40):
     resp = requests.get(
         f"{host}/api/2.0/serving-endpoints/{ENDPOINT_NAME}",
@@ -212,19 +206,19 @@ for i in range(40):
         config = state.get("config_update", "UNKNOWN")
         print(f"  [{i*30:>4}s] ready={ready}, config={config}")
         if ready == "READY" and config == "NOT_UPDATING":
-            print(f"\n✅ Endpoint READY!")
+            print(f"\nEndpoint READY!")
             break
         if "FAILED" in str(config):
-            print(f"\n❌ Deployment FAILED. Check service logs.")
+            print(f"\nDeployment FAILED. Check service logs.")
             break
     elif resp.status_code == 404:
         print(f"  [{i*30:>4}s] endpoint not yet created...")
     time.sleep(30)
 else:
-    print("\n⚠️ Still not ready after 20 min. Try again later.")
+    print("\nStill not ready after 20 min. Try again later.")
 
 # Test query
-print(f"\n🔍 Testing with a sample query...")
+print(f"\nTesting with a sample query...")
 response = requests.post(
     f"{host}/serving-endpoints/{ENDPOINT_NAME}/invocations",
     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -235,19 +229,19 @@ response = requests.post(
 if response.status_code == 200:
     result = response.json()
     if "choices" in result:
-        print("✅ Response:\n")
+        print("Response:\n")
         print(result["choices"][0]["message"]["content"])
     elif "messages" in result:
         ai_msgs = [m for m in result["messages"] if m.get("role") == "assistant" and m.get("content")]
         if ai_msgs:
-            print("✅ Response:\n")
+            print("Response:\n")
             print(ai_msgs[-1]["content"])
         else:
             print(json.dumps(result, indent=2)[:2000])
     else:
         print(json.dumps(result, indent=2)[:2000])
 else:
-    print(f"⚠️ Status {response.status_code}: {response.text[:500]}")
+    print(f"Status {response.status_code}: {response.text[:500]}")
 
 # COMMAND ----------
 

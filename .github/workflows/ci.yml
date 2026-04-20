@@ -94,7 +94,7 @@ jobs:
         run: |
           # Submit test notebook as a job run
           databricks jobs run-submit \
-            --json '{"run_name": "CI Integration Tests", "tasks": [{"task_key": "tests", "notebook_task": {"notebook_path": "/Workspace/Users/${{ secrets.DATABRICKS_USER }}/vibe_coding/riskbricks/tests/run_tests"}}]}'
+            --json '{"run_name": "CI Integration Tests", "tasks": [{"task_key": "tests", "notebook_task": {"notebook_path": "/Workspace/Users/${{ secrets.DATABRICKS_USER }}/riskbricks/tests/run_tests"}}]}'
 
   # ── Gate 4: Deploy (manual for prod) ───────────────────────
   deploy-staging:

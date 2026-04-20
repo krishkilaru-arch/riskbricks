@@ -34,7 +34,7 @@ st.caption("Ask questions about portfolio risk, holdings, stress tests, forecast
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-AGENT_ENDPOINT = os.getenv("RISKBRICKS_AGENT_ENDPOINT", "riskbricks-supervisor-agent")
+AGENT_ENDPOINT = os.getenv("RISKBRICKS_AGENT_ENDPOINT", "riskbricks-supervisor-agent")  # env var with safe default
 
 @st.cache_resource
 def _get_workspace_client():
@@ -81,29 +81,40 @@ def get_agent_response(user_message: str, chat_history: list) -> str:
             assistant_msgs = [m for m in data["messages"]
                               if m.get("role") == "assistant" and m.get("content")]
             if assistant_msgs:
+                # Step 1: Find tagged sub-agent messages from RAW content
+                # (before cleaning, which strips the tags)
+                import re as _re
+                _agent_tag = _re.compile(r'^\[\w+_agent\]:\s*')
+                _routing_re = _re.compile(r'\s*\{"next"\s*:\s*"[^"]*"[^}]*\}\s*')
+
+                tagged_raw = []
+                for m in assistant_msgs:
+                    raw = m["content"]
+                    if _agent_tag.match(raw):
+                        tagged_raw.append(raw)
+
+                if tagged_raw:
+                    # Pick the longest tagged message (most substantive)
+                    best_raw = max(tagged_raw, key=len)
+                    # Clean it for display
+                    best = _clean_message(best_raw)
+                    if best and len(best) > 20:
+                        return _escape_dollars(best)
+
+                # Fallback: clean all messages, pick longest
                 cleaned = []
                 for m in assistant_msgs:
                     text = _clean_message(m["content"])
                     if text and len(text) > 20:
                         cleaned.append(text)
-
                 if cleaned:
-                    # Prefer the LAST sub-agent tagged message from the
-                    # current turn. Using [-1] instead of max(key=len)
-                    # prevents stale history from being picked in multi-turn.
-                    import re as _re
-                    _agent_tag = _re.compile(r'^\[\w+_agent\]:\s*')
-                    tagged = [t for t in cleaned if _agent_tag.match(t)]
-                    if tagged:
-                        best = tagged[-1]
-                        return _agent_tag.sub('', best, count=1).strip()
-                    # Fallback: last substantive message
-                    return cleaned[-1]
+                    return _escape_dollars(max(cleaned, key=len))
+
                 for m in reversed(assistant_msgs):
                     text = _clean_message(m["content"])
                     if text and len(text) > 5:
-                        return text
-                return assistant_msgs[-1]["content"]
+                        return _escape_dollars(text)
+                return _escape_dollars(assistant_msgs[-1]["content"])
 
         # OpenAI ChatCompletion format fallback
         if "choices" in data and data["choices"]:
@@ -130,17 +141,16 @@ def get_agent_response(user_message: str, chat_history: list) -> str:
 # Safe parameter extraction (Issue 2: prevent SQL injection in fallback)
 # ---------------------------------------------------------------------------
 _KNOWN_MANAGERS = {"sarah russel", "rena tang", "mohit arora"}
-_KNOWN_SYMBOLS = {
-    "LMT", "RTX", "NOC", "GD", "BA", "HII",
-    "XOM", "CVX", "COP", "SLB", "HAL", "OXY",
-    "JPM", "BAC", "GS", "MS", "C", "WFC",
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
-    "INTC", "AMD", "AVGO", "QCOM", "MU", "LRCX", "AMAT",
-    "WMT", "COST", "HD", "NKE", "MCD", "SBUX",
-    "JNJ", "PFE", "UNH", "LLY", "ABBV", "MRK",
-    "CAT", "DE", "HON", "GE", "MMM",
-    "UAL", "DAL", "AAL",
-}
+@st.cache_data(ttl=3600)
+def _load_known_symbols():
+    """Load valid symbols from DB for input validation."""
+    from db_utils import run_query, CATALOG
+    df = run_query(f"SELECT DISTINCT symbol FROM {CATALOG}.gold.company_universe")
+    if not df.empty:
+        return set(df["symbol"].tolist())
+    return {"AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "JPM", "BAC"}  # minimal fallback
+
+_KNOWN_SYMBOLS = _load_known_symbols()
 
 
 def _extract_manager(query: str) -> str:
@@ -162,7 +172,21 @@ def _extract_symbol(query: str) -> str:
     for t in tokens:
         if t in _KNOWN_SYMBOLS:
             return t
-    for sym in ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META"]:
+
+@st.cache_data(ttl=3600)
+def _get_trending_symbols():
+    """Get top 7 symbols by market activity from DB."""
+    from db_utils import run_query, CATALOG
+    df = run_query(f"""
+        SELECT symbol FROM {CATALOG}.gold.company_universe 
+        WHERE is_fortune500 = true 
+        ORDER BY latest_price * COALESCE(volatility_30d, 0) DESC LIMIT 7
+    """)
+    if not df.empty:
+        return df["symbol"].tolist()
+    return ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META"]
+
+    for sym in _get_trending_symbols():
         if sym.lower() in query.lower():
             return sym
     return "NVDA"

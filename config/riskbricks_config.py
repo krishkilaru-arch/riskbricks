@@ -3,12 +3,16 @@ RiskBricks - Central Configuration
 ===================================
 Single source of truth for all workspace-specific settings.
 
-Usage in notebooks:
-    import sys
-    sys.path.append("/Workspace" + _get_repo_root())
+Usage in notebooks::
+
+    import sys, os
+    _nb = dbutils.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+    _root = "/Workspace" + (_nb[:_nb.find("/notebooks/")] if "/notebooks/" in _nb else os.path.dirname(_nb))
+    sys.path.insert(0, _root)
     from config.riskbricks_config import cfg
 
-Usage in Streamlit app:
+Usage in Streamlit app::
+
     from config.riskbricks_config import cfg
 """
 
@@ -26,12 +30,14 @@ class RiskBricksConfig:
     TOOLS_SCHEMA = "agent_tools"
     AGENTS_SCHEMA = "agents"
     MODELS_SCHEMA = "models"
+    PIPELINES_SCHEMA = "pipelines"
+    MONITORING_SCHEMA = "monitoring"
 
-    # ── Secrets ──────────────────────────────────────────────────
+    # ── Secrets ────────────────────────────────────────────────
     SECRETS_SCOPE = "riskbricks"
     FRED_API_KEY_SECRET = "fred-api-key"
 
-    # ── Model Endpoints ──────────────────────────────────────────
+    # ── Model Endpoints ────────────────────────────────────────
     LLM_ENDPOINT = "databricks-meta-llama-3-3-70b-instruct"
     AGENT_ENDPOINT = os.getenv("RISKBRICKS_AGENT_ENDPOINT", "riskbricks-supervisor-agent")
 
@@ -65,7 +71,7 @@ class RiskBricksConfig:
         except (ValueError, IndexError):
             self.USER_EMAIL = ""
 
-    # ── Fully-qualified table names ──────────────────────────────
+    # ── Fully-qualified table names ─────────────────────────────
     def table(self, schema: str, name: str) -> str:
         return f"{self.CATALOG}.{schema}.{name}"
 
@@ -92,6 +98,14 @@ class RiskBricksConfig:
     @property
     def models_db(self):
         return f"{self.CATALOG}.{self.MODELS_SCHEMA}"
+
+    @property
+    def pipelines_db(self):
+        return f"{self.CATALOG}.{self.PIPELINES_SCHEMA}"
+
+    @property
+    def monitoring_db(self):
+        return f"{self.CATALOG}.{self.MONITORING_SCHEMA}"
 
     def agent_notebook(self, name):
         return f"{self.AGENTS_PATH}/{name}"

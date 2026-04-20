@@ -9,7 +9,7 @@ bundle:
 variables:
   notebooks_path:
     description: "Absolute workspace path to notebooks directory"
-    default: /Workspace/${workspace.current_user.name}/vibe_coding/riskbricks/notebooks
+    default: /Workspace/${workspace.current_user.name}/riskbricks/notebooks
   run_as_user:
     description: "User email for job run_as"
     default: ${workspace.current_user.name}
@@ -35,7 +35,7 @@ targets:
 resources:
   apps:
     riskbricks_ui:
-      name: riskbricks-app
+      name: riskbricks
       source_code_path: ./app
 
   jobs:

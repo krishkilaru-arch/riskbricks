@@ -22,22 +22,22 @@ from db_utils import run_query, CATALOG
 CONFIG_DIR = os.path.join(os.path.dirname(APP_DIR), "config")
 if CONFIG_DIR not in sys.path:
     sys.path.insert(0, os.path.dirname(APP_DIR))
-try:
-    from config.constants import SECTOR_MAP, ALL_SECTORS
-except ImportError:
-    # Fallback if config not importable
-    SECTOR_MAP = {
-        "LMT":"Defense","RTX":"Defense","NOC":"Defense","GD":"Defense","BA":"Defense","HII":"Defense",
-        "XOM":"Energy","CVX":"Energy","COP":"Energy","SLB":"Energy","HAL":"Energy","OXY":"Energy",
-        "JPM":"Banks","BAC":"Banks","GS":"Banks","MS":"Banks","C":"Banks","WFC":"Banks",
-        "AAPL":"BigTech","MSFT":"BigTech","GOOGL":"BigTech","AMZN":"BigTech","NVDA":"BigTech","META":"BigTech","TSLA":"BigTech",
-        "INTC":"Semis","AMD":"Semis","AVGO":"Semis","QCOM":"Semis","MU":"Semis","LRCX":"Semis","AMAT":"Semis",
-        "WMT":"Consumer","COST":"Consumer","HD":"Consumer","NKE":"Consumer","MCD":"Consumer","SBUX":"Consumer",
-        "JNJ":"Pharma","PFE":"Pharma","UNH":"Pharma","LLY":"Pharma","ABBV":"Pharma","MRK":"Pharma",
-        "CAT":"Industrial","DE":"Industrial","HON":"Industrial","GE":"Industrial","MMM":"Industrial",
-        "UAL":"Airlines","DAL":"Airlines","AAL":"Airlines",
-    }
-    ALL_SECTORS = sorted(set(SECTOR_MAP.values()))
+@st.cache_data(ttl=3600)
+def _load_sector_map():
+    """Load symbol→sector from DB. Falls back to config constants."""
+    from db_utils import run_query, CATALOG
+    df = run_query(f"SELECT symbol, sector FROM {CATALOG}.gold.company_universe WHERE sector IS NOT NULL")
+    if not df.empty:
+        return dict(zip(df["symbol"], df["sector"]))
+    # Fallback to config constants (available in app context via sys.path)
+    try:
+        from config.constants import FALLBACK_SECTOR_MAP
+        return dict(FALLBACK_SECTOR_MAP)
+    except ImportError:
+        return {}
+
+SECTOR_MAP = _load_sector_map()
+ALL_SECTORS = sorted(set(SECTOR_MAP.values())) if SECTOR_MAP else []
 
 st.title("\U0001f3af ML Stock Predictions")
 st.caption("Ensemble model (LightGBM + RandomForest + GradientBoosting) \u2014 17 features, 6 data sources")

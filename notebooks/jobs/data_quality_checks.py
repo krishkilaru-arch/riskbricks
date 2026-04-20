@@ -9,13 +9,19 @@
 
 # COMMAND ----------
 
-import logging, json
+# ── Import centralized config ────────────────────────────────────────
+import sys, os
+_nb  = dbutils.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + (_nb[:_nb.find("/notebooks/")] if "/notebooks/" in _nb else os.path.dirname(_nb))
+sys.path.insert(0, _root)
+from config import CATALOG, setup_logger
+
+import json
 from datetime import datetime, timedelta, timezone
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger("riskbricks.data_quality")
+logger = setup_logger("riskbricks.data_quality")
 
-dbutils.widgets.text("catalog", "riskbricks")
+dbutils.widgets.text("catalog", CATALOG)
 dbutils.widgets.text("alert_on_failure", "true")
 catalog = dbutils.widgets.get("catalog").strip()
 

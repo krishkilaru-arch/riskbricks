@@ -23,8 +23,11 @@ dbutils.widgets.text("finnhub_market_categories", "general,forex,crypto,merger,e
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## 📦 Install Dependencies
+from config.riskbricks_config import cfg as _cfg
+
+
+%md
+## 📦 Install Dependencies
 
 # COMMAND ----------
 
@@ -61,7 +64,7 @@ finnhub_market_categories = [
 ]
 
 try:
-    finnhub_token = dbutils.secrets.get(scope="riskbricks", key="finnhub-token").strip()
+    finnhub_token = dbutils.secrets.get(scope=_cfg.SECRETS_SCOPE, key="finnhub-token").strip()
 except Exception:
     finnhub_token = ""
 
@@ -516,4 +519,3 @@ save_rss_table(all_articles, f"{catalog}.bronze.news_rss_all")
 # COMMAND ----------
 
 dbutils.notebook.exit("success")
-

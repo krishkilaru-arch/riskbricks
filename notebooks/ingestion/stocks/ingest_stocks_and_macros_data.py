@@ -49,9 +49,18 @@ print("✅ Libraries imported successfully")
 # COMMAND ----------
 
 # DBTITLE 1,Configuration
+# ── Import centralized config ────────────────────────────────────────
+import sys, os
+_nb  = dbutils.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + (_nb[:_nb.find("/notebooks/")] if "/notebooks/" in _nb else os.path.dirname(_nb))
+sys.path.insert(0, _root)
+from config import CATALOG as _CFG_CATALOG, FRED_SERIES as _FRED_SERIES
+from config.riskbricks_config import cfg as _cfg
+
+
 # FRED API Key - Retrieved from Databricks secrets
 try:
-    FRED_API_KEY = dbutils.secrets.get(scope="riskbricks", key="fred-api-key")
+    FRED_API_KEY = dbutils.secrets.get(scope=_cfg.SECRETS_SCOPE, key=_cfg.FRED_API_KEY_SECRET)
     print("✅ FRED API key loaded from secrets")
 except Exception:
     # Fallback for development/testing
@@ -59,7 +68,7 @@ except Exception:
     print("⚠️ Using fallback FRED API key - store in secrets for production")
 
 # Database/catalog setup — use widget, not hardcoded value
-dbutils.widgets.text("catalog", "riskbricks")
+dbutils.widgets.text("catalog", _CFG_CATALOG)
 catalog = dbutils.widgets.get("catalog").strip()
 schema = "bronze"
 
@@ -196,12 +205,7 @@ print("📊 Fetching macro economic indicators from FRED...")
 
 # Define indicators to fetch
 fred_indicators = {
-    "FEDFUNDS": "Federal Funds Effective Rate",
-    "CPIAUCSL": "Consumer Price Index",
-    "UNRATE": "Unemployment Rate",
-    "GDP": "Gross Domestic Product",
-    "DGS10": "10-Year Treasury Constant Maturity Rate",
-    "VIXCLS": "CBOE Volatility Index (VIX)"
+    **_FRED_SERIES  # loaded from config
 }
 
 # Fetch all indicators

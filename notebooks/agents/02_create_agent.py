@@ -9,7 +9,16 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "riskbricks")
+# ── Import centralized config ────────────────────────────────────────
+import sys, os
+_nb  = dbutils.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + (_nb[:_nb.find("/notebooks/")] if "/notebooks/" in _nb else os.path.dirname(_nb))
+sys.path.insert(0, _root)
+from config import CATALOG as _CFG_CATALOG
+from config.riskbricks_config import cfg as _cfg
+
+
+dbutils.widgets.text("catalog", _CFG_CATALOG)
 catalog = dbutils.widgets.get("catalog").strip()
 print(f"Using catalog: {catalog}")
 
@@ -142,7 +151,7 @@ input_example = {
 # Declare all resource dependencies for automatic authentication passthrough
 # This ensures the system service principal gets the right UC grants automatically
 resources = [
-    DatabricksServingEndpoint(endpoint_name="databricks-meta-llama-3-3-70b-instruct"),
+    DatabricksServingEndpoint(endpoint_name=_cfg.LLM_ENDPOINT),
     DatabricksFunction(function_name=f"{catalog}.agent_tools.get_portfolio_risk_metrics"),
     DatabricksFunction(function_name=f"{catalog}.agent_tools.get_stress_test_results"),
     DatabricksFunction(function_name=f"{catalog}.agent_tools.get_portfolio_holdings"),

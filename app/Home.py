@@ -106,8 +106,9 @@ features = [
     ("\U0001f465", "Portfolio Management", "View and manage portfolio managers, holdings, and strategy constraints."),
     ("\u2699\ufe0f", "Data Management",     "Monitor Bronze / Silver / Gold layer health and data freshness."),
     ("\U0001f3af", "ML Predictions",      "Ensemble stock direction forecasts with confidence scores, sector analysis, and backtesting."),
+    ("\U0001f4d6", "About & Docs",        "Full architecture diagrams, evaluation results, and Databricks feature coverage."),
 ]
-cols = st.columns(5)
+cols = st.columns(6)
 for col, (icon, title, desc) in zip(cols, features):
     col.markdown(f'''
     <div class="feat-card">
@@ -130,4 +131,4 @@ st.markdown("""
 """)
 
 st.markdown("---")
-st.caption("RiskBricks \u00b7 Built on Databricks Lakehouse \u00b7 Medallion Architecture \u00b7 Unity Catalog")
+st.caption("RiskBricks \u00b7 Built on Databricks Lakehouse \u00b7 Databricks Summit 2026 \u00b7 See \U0001f4d6 About page for full documentation")

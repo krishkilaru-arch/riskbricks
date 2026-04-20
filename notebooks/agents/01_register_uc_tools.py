@@ -9,7 +9,15 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "riskbricks")
+# ── Import centralized config ────────────────────────────────────────
+import sys, os
+_nb  = dbutils.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + (_nb[:_nb.find("/notebooks/")] if "/notebooks/" in _nb else os.path.dirname(_nb))
+sys.path.insert(0, _root)
+from config import CATALOG as _CFG_CATALOG
+
+
+dbutils.widgets.text("catalog", _CFG_CATALOG)
 catalog = dbutils.widgets.get("catalog").strip()
 schema  = "agent_tools"
 
@@ -253,21 +261,23 @@ print("✅ get_stock_forecast")
 
 spark.sql(f"""
 CREATE OR REPLACE FUNCTION {catalog}.{schema}.get_decision_signal(
-  p_symbol STRING COMMENT 'Stock ticker symbol (e.g. "NVDA", "AAPL") or "all"'
+  p_symbol STRING COMMENT 'Stock ticker symbol (e.g. "NVDA", "AAPL") or "all" for top BUY signals'
 )
 RETURNS TABLE(
-  symbol          STRING,
-  as_of_date      DATE,
-  signal          STRING,
-  score           DOUBLE,
-  expected_return DOUBLE,
-  model_count     BIGINT,
-  vol_20d         DOUBLE,
-  beta_1y         DOUBLE
+  recommendation      STRING,
+  symbol              STRING,
+  as_of_date          DATE,
+  signal              STRING,
+  score               DOUBLE,
+  expected_return     DOUBLE,
+  model_count         BIGINT,
+  vol_20d             DOUBLE,
+  beta_1y             DOUBLE
 )
-COMMENT 'Returns the latest Buy/Hold/Sell decision signal for a stock with composite score (0-100), expected return, and key risk metrics. Use "all" for all signals.'
+COMMENT 'Returns Buy/Hold/Sell decision signal for a stock. Score indicates conviction strength. Use "all" for top BUY signals across all stocks.'
 RETURN
   SELECT
+    CONCAT(d.symbol, ': ', d.signal, ' signal (score ', ROUND(d.score, 2), ', expected return ', ROUND(d.expected_return * 100, 2), '%)') AS recommendation,
     d.symbol,
     d.as_of_date,
     d.signal,
@@ -277,9 +287,10 @@ RETURN
     d.vol_20d,
     d.beta_1y
   FROM {catalog}.gold.decision_signals d
-  WHERE UPPER(p_symbol) = 'ALL'
-     OR UPPER(d.symbol) = UPPER(p_symbol)
+  WHERE (UPPER(p_symbol) = 'ALL' AND d.signal = 'BUY')
+     OR (UPPER(p_symbol) != 'ALL' AND UPPER(d.symbol) = UPPER(p_symbol))
   ORDER BY d.score DESC
+  LIMIT 25
 """)
 print("✅ get_decision_signal")
 

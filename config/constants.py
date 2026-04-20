@@ -1,12 +1,12 @@
-"""
-RiskBricks — Shared Constants
-==============================
-Single source of truth for sector maps, focus symbols, and other shared data.
-Imported by notebooks, app pages, and agent code.
+"""RiskBricks — Static Fallback Constants
+
+Used ONLY during initial setup (Phase 0-1) before gold.company_universe
+is populated.  After that, all notebooks call the dynamic loaders in
+config/__init__.py  (get_symbols, get_sector_map, get_company_names).
 """
 
-# Focus symbols for ML predictions and news scraping
-FOCUS_SYMBOLS = [
+# ── Fallback symbol list (51 stocks, pre-company_universe) ───────────
+FALLBACK_SYMBOLS = [
     "LMT", "RTX", "NOC", "GD", "BA", "HII",
     "XOM", "CVX", "COP", "SLB", "HAL", "OXY",
     "JPM", "BAC", "GS", "MS", "C", "WFC",
@@ -18,28 +18,31 @@ FOCUS_SYMBOLS = [
     "UAL", "DAL", "AAL",
 ]
 
-# Sector mapping for all focus symbols
-SECTOR_MAP = {
-    "LMT": "Defense", "RTX": "Defense", "NOC": "Defense", "GD": "Defense",
-    "BA": "Defense", "HII": "Defense",
-    "XOM": "Energy", "CVX": "Energy", "COP": "Energy", "SLB": "Energy",
-    "HAL": "Energy", "OXY": "Energy",
-    "JPM": "Banks", "BAC": "Banks", "GS": "Banks", "MS": "Banks",
-    "C": "Banks", "WFC": "Banks",
-    "AAPL": "BigTech", "MSFT": "BigTech", "GOOGL": "BigTech", "AMZN": "BigTech",
-    "NVDA": "BigTech", "META": "BigTech", "TSLA": "BigTech",
-    "INTC": "Semis", "AMD": "Semis", "AVGO": "Semis", "QCOM": "Semis",
-    "MU": "Semis", "LRCX": "Semis", "AMAT": "Semis",
-    "WMT": "Consumer", "COST": "Consumer", "HD": "Consumer", "NKE": "Consumer",
-    "MCD": "Consumer", "SBUX": "Consumer",
-    "JNJ": "Pharma", "PFE": "Pharma", "UNH": "Pharma", "LLY": "Pharma",
-    "ABBV": "Pharma", "MRK": "Pharma",
-    "CAT": "Industrial", "DE": "Industrial", "HON": "Industrial",
-    "GE": "Industrial", "MMM": "Industrial",
-    "UAL": "Airlines", "DAL": "Airlines", "AAL": "Airlines",
+# ── Fallback sector mapping (GICS-aligned names for company_universe) ─
+FALLBACK_SECTOR_MAP = {
+    "LMT": "Industrials", "RTX": "Industrials", "NOC": "Industrials",
+    "GD": "Industrials", "BA": "Industrials", "HII": "Industrials",
+    "XOM": "Energy", "CVX": "Energy", "COP": "Energy",
+    "SLB": "Energy", "HAL": "Energy", "OXY": "Energy",
+    "JPM": "Financials", "BAC": "Financials", "GS": "Financials",
+    "MS": "Financials", "C": "Financials", "WFC": "Financials",
+    "AAPL": "Technology", "MSFT": "Technology", "GOOGL": "Technology",
+    "AMZN": "Technology", "NVDA": "Technology", "META": "Technology",
+    "TSLA": "Consumer Discretionary",
+    "INTC": "Technology", "AMD": "Technology", "AVGO": "Technology",
+    "QCOM": "Technology", "MU": "Technology", "LRCX": "Technology",
+    "AMAT": "Technology",
+    "WMT": "Consumer Staples", "COST": "Consumer Staples",
+    "HD": "Consumer Discretionary", "NKE": "Consumer Discretionary",
+    "MCD": "Consumer Discretionary", "SBUX": "Consumer Discretionary",
+    "JNJ": "Healthcare", "PFE": "Healthcare", "UNH": "Healthcare",
+    "LLY": "Healthcare", "ABBV": "Healthcare", "MRK": "Healthcare",
+    "CAT": "Industrials", "DE": "Industrials", "HON": "Industrials",
+    "GE": "Industrials", "MMM": "Industrials",
+    "UAL": "Industrials", "DAL": "Industrials", "AAL": "Industrials",
 }
 
-# Company names for RSS feed scraping
+# ── Company names for RSS feed scraping ───────────────────────────
 COMPANY_NAMES = {
     "LMT": "Lockheed Martin", "RTX": "RTX Corp", "NOC": "Northrop Grumman",
     "GD": "General Dynamics", "BA": "Boeing", "HII": "Huntington Ingalls",
@@ -50,7 +53,8 @@ COMPANY_NAMES = {
     "AAPL": "Apple", "MSFT": "Microsoft", "GOOGL": "Alphabet Google",
     "AMZN": "Amazon", "NVDA": "NVIDIA", "META": "Meta Platforms", "TSLA": "Tesla",
     "INTC": "Intel", "AMD": "Advanced Micro Devices", "AVGO": "Broadcom",
-    "QCOM": "Qualcomm", "MU": "Micron", "LRCX": "Lam Research", "AMAT": "Applied Materials",
+    "QCOM": "Qualcomm", "MU": "Micron", "LRCX": "Lam Research",
+    "AMAT": "Applied Materials",
     "WMT": "Walmart", "COST": "Costco", "HD": "Home Depot",
     "NKE": "Nike", "MCD": "McDonald's", "SBUX": "Starbucks",
     "JNJ": "Johnson & Johnson", "PFE": "Pfizer", "UNH": "UnitedHealth",
@@ -60,7 +64,7 @@ COMPANY_NAMES = {
     "UAL": "United Airlines", "DAL": "Delta Air Lines", "AAL": "American Airlines",
 }
 
-# FRED macro indicator series
+# ── FRED macro indicator series ───────────────────────────────────
 FRED_SERIES = {
     "VIXCLS": "VIX",
     "T10Y2Y": "Yield_Spread_10Y2Y",
@@ -72,17 +76,33 @@ FRED_SERIES = {
     "DCOILWTICO": "WTI_Oil",
 }
 
-# Portfolio manager names (for agent extraction)
+# ── Portfolio manager names (for agent extraction) ───────────────
 KNOWN_MANAGERS = ["Sarah Russel", "Rena Tang", "Mohit Arora"]
 
-# ML model features
-CURATED_FEATURES = [
-    "return_5d", "return_20d", "volatility_20d",
-    "ai_sentiment", "gdelt_tone", "advance_ratio",
-    "sector_momentum_5d", "sector_breadth",
-    "rsi_14", "macd_hist", "bb_pct", "volume_ratio",
-    "gap_pct", "close_position",
-    "vix", "hy_spread", "yield_spread",
+
+# ── Stress test scenarios (used by daily_data_refresh, create_risk_analytics) ─
+STRESS_SCENARIOS = [
+    {"name": "Market Crash (-20%)", "description": "S&P 500 drops 20%", "shock_pct": -20.0},
+    {"name": "Rate Hike (+200bp)", "description": "Fed raises rates 200bp, equity drop ~8%", "shock_pct": -8.0},
+    {"name": "Recession", "description": "GDP contracts, broad market selloff ~15%", "shock_pct": -15.0},
+    {"name": "Bull Rally (+15%)", "description": "Strong market rally +15%", "shock_pct": 15.0},
 ]
 
-ALL_SECTORS = sorted(set(SECTOR_MAP.values()))
+# ── FRED indicator metadata (series title, units, frequency, seasonal adj) ────
+FRED_INDICATOR_META = {
+    "FEDFUNDS": ("Federal Funds Effective Rate", "Percent", "Monthly", "Seasonally Adjusted"),
+    "CPIAUCSL": ("Consumer Price Index for All Urban Consumers", "Index 1982-1984=100", "Monthly", "Seasonally Adjusted"),
+    "UNRATE":   ("Unemployment Rate", "Percent", "Monthly", "Seasonally Adjusted"),
+    "GDP":      ("Gross Domestic Product", "Billions of Dollars", "Quarterly", "Seasonally Adjusted Annual Rate"),
+    "DGS10":    ("10-Year Treasury Constant Maturity Rate", "Percent", "Daily", "Not Seasonally Adjusted"),
+    "VIXCLS":   ("CBOE Volatility Index: VIX", "Index", "Daily", "Not Seasonally Adjusted"),
+}
+
+# ── GDELT company keyword overrides (supplements dynamic company_name tokens) ─
+GDELT_COMPANY_KEYWORDS = {
+    "AAPL": ["APPLE"], "MSFT": ["MICROSOFT"], "GOOGL": ["GOOGLE", "ALPHABET"],
+    "AMZN": ["AMAZON"], "TSLA": ["TESLA"], "NVDA": ["NVIDIA"],
+    "META": ["FACEBOOK"], "NFLX": ["NETFLIX"], "COST": ["COSTCO"],
+    "JPM": ["JPMORGAN"], "BAC": ["BANK AMERICA"], "GS": ["GOLDMAN SACHS"],
+    "MS": ["MORGAN STANLEY"], "WMT": ["WALMART"], "HD": ["HOME DEPOT"],
+}
