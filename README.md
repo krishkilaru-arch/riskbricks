@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">RiskBricks</h1>
   <p align="center"><strong>AI-Powered Portfolio Risk Analytics on Databricks Lakehouse</strong></p>
-  <p align="center"><em>Presented at Databricks Summit 2026</em></p>
+  <p align="center"><em> Submitting the proposal to present at Databricks Summit 2026</em></p>
 </p>
 
 ---
